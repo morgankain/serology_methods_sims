@@ -12,8 +12,7 @@ library(tidyverse)
 library(here)
 library(knitr)
 library(rmarkdown)
-library(paws)
-library(conflicted)
+library(future)
 
 ################################################################################
 #
@@ -24,9 +23,13 @@ library(conflicted)
 #
 ################################################################################
 
-library(tflow)
-library(fnmate)
-library(containerTemplateUtils) 
-library(dotenv)
-library(usethis)
-library(kableExtra)
+library(dplyr)
+library(tidyr)
+library(magrittr)
+library(MASS)
+library(ggplot2)
+library(mclust)
+library(factoextra)
+library(rstan)
+library(effects)
+

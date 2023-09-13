@@ -8,84 +8,163 @@
 suppressPackageStartupMessages(source("packages.R"))
 for (f in list.files(here::here("R"), full.names = TRUE)) source (f)
 
-# Set build options ------------------------------------------------------------
+# Setup  ------------------------------------------------------------
 
+## Setup for future package for parallelization. This is the max allowable number of workers
+nworker <- 6
+nthread <- 6
+future::plan(list(tweak(future.callr::callr, workers = nworker), tweak(future.callr::callr, workers = nthread)))
+future::plan(future.callr::callr, workers = nworker)
 
 # Groups of targets ------------------------------------------------------------
 
-## Data input
-data_input_targets <- tar_plan(
-  ## Example data input target/s; delete and replace with your own data input
-  ## targets
+## Group of targets associated with parameter choices that the user must define
+setup_targets <- tar_plan(
   
-  targets::tar_target("example_target",create_example_target(x = TRUE))
-)
-
-
-## Data processing
-data_processing_targets <- tar_plan(
-  ## Example data processing target/s; delete and replace with your own data
-  ## processing targets
+    ## Establish what stan models to fit
+    tar_target(models_to_fit,
+      c(
+   #    "mixing_simple_diff.stan"
+   #  , "mixing_simple_diff_beta.stan"
+        "mixing_simple_diff_beta2.stan"
+      )
+    )
+    
+    ## Into list for future and purrr::pmap
+  , tar_target(stan_models.l, {
+      data.frame(model = models_to_fit) %>% mutate(index = seq(n())) %>% split_tibble(., "index")
+    })
+    
+    ## Establish parameters for the simulations
+  , tar_target(sim.params,
+      establish_parameters(
+        n_param_sets  = 20
+      , n_samps       = 1000
+      , mu_neg        = -2.75
+      , sd_neg        = 1
+      , mu_pos_delta  = c(1, 5)
+      , sd_pos_delta  = 0.5
+      , lambda        = 0.2
+      , lambda_age    = 0.2
+      , beta_age      = 1
+      , age_prop      = 0.5
+     )
+   )
   
 )
 
-
-## Analysis
-analysis_targets <- tar_plan(
-  ## Example analysis target/s; delete and replace with your own analysis
-  ## targets
- 
-)
-
-## Outputs
-outputs_targets <- tar_plan(
-  ## This is a placeholder for any targets that produces outputs such as
-  ## tables of model outputs, plots, etc. Delete or keep empty if you will not
-  ## produce any of these types of outputs
-)
-
-
-## Report
-report_targets <- tar_plan(
-  ## Example Rmarkdown report target/s; delete and replace with your own
-  ## Rmarkdown report target/s
+## Simulate data from established parameters
+simulation_targets <- tar_plan(
   
-  # tar_render(
-  #   example_report, path = "reports/example_report.Rmd", 
-  #   output_dir = "outputs", knit_root_dir = here::here()
-  # )
+    ## Simulate data
+    tar_target(sim.data,
+      simulate_data(
+        param_sets = sim.params
+      )
+    )
+    
+    ## Into list for future and purrr::pmap
+  , tar_target(simulated_data.l, {
+      sim.data %>% split_tibble(., "param_set")
+    })
+  
+    ## Plot raw data
+  , tar_target(data_plot,
+      examine_data(
+        simulated_data = sim.data
+      )
+    )
+  
 )
 
-## Deploy targets
-deploy_targets <- tar_plan(
-  ## This is a placeholder for any targets that are meant to deploy reports or
-  ## any outputs externally e.g., website, Google Cloud Storage, Amazon Web
-  ## Services buckets, etc. Delete or keep empty if you will not perform any
-  ## deployments. The aws_s3_upload function requires AWS credentials to be loaded
-  ## but will print a warning and do nothing if not
+## fitting in a few ways
+fitting_targets <- tar_plan(
   
-  # html_files = containerTemplateUtils::get_file_paths(tar_obj = example_report,
-  #                                                     pattern = "\\.html$"),
-  # uploaded_report = containerTemplateUtils::aws_s3_upload(html_files,
-  #                                                       bucket = Sys.getenv("AWS_BUCKET"),
-  #                                                       error = FALSE,
-  #                                                       file_type = "html"),
-  # email_updates= 
-  #   containerTemplateUtils::send_email_update(
-  #     to = strsplit(Sys.getenv("EMAIL_RECIPIENTS"),";")[[1]],
-  #     from = Sys.getenv("EMAIL_SENDER"),
-  #     project_name = "My Project",
-  #     attach = TRUE
-  #   )
+    ## -- Two stage via mclust and then regression
+  
+    ## stage one: run mclust
+    tar_target(mculst.groups,
+      group_via_mculst(
+        simulated_data = sim.data
+      , param_sets     = sim.params
+      )
+    )
+  
+    ## stage two: run regression
+  , tar_target(regressions.fit, 
+      fit_regression(
+        groups         = mculst.groups
+      , param_sets     = sim.params
+      )
+    )
+  
+    ## -- One stage stan model
+  
+    ## Fir the stan models and return all the raw models in a list
+  , tar_target(stan_fits.l, 
+      fit_stan_models(
+        simulated_data = simulated_data.l
+      , param_sets     = sim.params
+      , model_names    = stan_models.l
+      )
+    , pattern   = cross(simulated_data.l, stan_models.l)
+    , iteration = "list"
+   )
+  
+    ## Sort these output stan models into a sensible list object to combine with parameters for cleaning
+  , tar_target(stan.fits,
+      sort_stan_fits(
+        stan_fits.l   = stan_fits.l
+      , models_to_fit = models_to_fit
+      )
+    )
+  
 )
+
+## Tidy up code returned by fitting targets
+cleanup_targets <- tar_plan(
+  
+   ## Summarize regression fits
+   tar_target(regressions.summary,
+     sort_regression(
+       fitted_regressions = regressions.fit
+     , param_sets         = sim.params
+     )
+   )
+  
+   ## Summarize stan fits and combine with parameter values
+ , tar_target(stan.summary,
+      summarize_stan_fits(
+        model_fits     = stan.fits
+      , param_sets     = sim.params
+      , stan_models    = models_to_fit
+      )
+    )
+
+)
+
+## plot output
+plotting_targets <- tar_plan(
+  
+  ## Plot summaries
+  tar_target(fit.plot,
+    plot_summary(
+      stan.sum   = stan.summary
+    , mclust.sum = regressions.summary
+    , param_sets = sim.params
+    )
+  )
+
+)
+
+
 
 # List targets -----------------------------------------------------------------
 
 list(
-  data_input_targets,
-  data_processing_targets,
-  analysis_targets,
-  outputs_targets,
-  report_targets,
-  deploy_targets
-)
+  setup_targets
+, simulation_targets
+, fitting_targets
+, cleanup_targets
+, plotting_targets
+  )
