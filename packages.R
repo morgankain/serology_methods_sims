@@ -33,3 +33,8 @@ library(factoextra)
 library(rstan)
 library(effects)
 
+## Needed for internal calls in stan | targets
+conflicted::conflicts_prefer(rstan::extract)
+conflicted::conflicts_prefer(stats::lag)
+conflicted::conflicts_prefer(purrr::map)
+conflicted::conflicts_prefer(future::run)

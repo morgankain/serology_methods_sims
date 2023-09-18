@@ -24,9 +24,9 @@ setup_targets <- tar_plan(
     ## Establish what stan models to fit
     tar_target(models_to_fit,
       c(
-   #    "mixing_simple_diff.stan"
-   #  , "mixing_simple_diff_beta.stan"
-        "mixing_simple_diff_beta2.stan"
+   #    "cluster_regression_base.stan"
+        "cluster_regression_with_beta.stan"
+      , "cluster_regression_with_beta_theta.stan"
       )
     )
     
@@ -38,16 +38,17 @@ setup_targets <- tar_plan(
     ## Establish parameters for the simulations
   , tar_target(sim.params,
       establish_parameters(
-        n_param_sets  = 20
-      , n_samps       = 1000
-      , mu_neg        = -2.75
-      , sd_neg        = 1
-      , mu_pos_delta  = c(1, 5)
-      , sd_pos_delta  = 0.5
-      , lambda        = 0.2
-      , lambda_age    = 0.2
-      , beta_age      = 1
-      , age_prop      = 0.5
+        n_param_sets   = 3
+      , n_sims_per_set = 2
+      , n_samps        = 1000
+      , mu_neg         = -2.75
+      , sd_neg         = 1
+      , mu_pos_delta   = c(1, 5)
+      , sd_pos_delta   = 0.5
+      , beta_base      = 0.2 ## 20% of adults are seropositive
+      , beta_age_delta = 0.2 ## 40% of juveniles are seropositive
+      , mu_theta_age   = 1
+      , age_prop       = 0.5
      )
    )
   
@@ -65,7 +66,7 @@ simulation_targets <- tar_plan(
     
     ## Into list for future and purrr::pmap
   , tar_target(simulated_data.l, {
-      sim.data %>% split_tibble(., "param_set")
+      sim.data %>% split_tibble(., c("param_set", "sim_num"))
     })
   
     ## Plot raw data
@@ -80,13 +81,22 @@ simulation_targets <- tar_plan(
 ## fitting in a few ways
 fitting_targets <- tar_plan(
   
+    ## -- Rough 3SD cutoff above the mean of the negative control
+     ## we dont have a negative control so use 3sd above the mean of the left group
+    
+    ## get group assignment based on 3Sd cutoff
+    tar_target(three_sd.groups,
+      group_via_3sd(
+        simulated_data = sim.data
+      )
+    )
+  
     ## -- Two stage via mclust and then regression
   
     ## stage one: run mclust
-    tar_target(mculst.groups,
+  , tar_target(mculst.groups,
       group_via_mculst(
         simulated_data = sim.data
-      , param_sets     = sim.params
       )
     )
   
@@ -94,7 +104,6 @@ fitting_targets <- tar_plan(
   , tar_target(regressions.fit, 
       fit_regression(
         groups         = mculst.groups
-      , param_sets     = sim.params
       )
     )
   
@@ -137,7 +146,6 @@ cleanup_targets <- tar_plan(
       summarize_stan_fits(
         model_fits     = stan.fits
       , param_sets     = sim.params
-      , stan_models    = models_to_fit
       )
     )
 
@@ -156,7 +164,6 @@ plotting_targets <- tar_plan(
   )
 
 )
-
 
 
 # List targets -----------------------------------------------------------------
