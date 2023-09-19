@@ -1,7 +1,9 @@
 
 #### Most recent note/work update
 
-- September 13: Repo created with first-pass functioning code in targets
+- September 19: Full pipeline for multiple (simple) models with
+  summaries working. Next step to explore some coverage and then start
+  expanding the complexity of the stan models
 
 ### Simulations to compare alternative methods of analyzing serology data
 

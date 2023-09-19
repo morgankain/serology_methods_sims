@@ -107,7 +107,7 @@ group_via_3sd           <- function(simulated_data, param_sets) {
  , c("param_set", "sim_num")
  )
  
-  lapply(simulated_data.l, FUN = function(x) {
+ three_sd.g <- lapply(simulated_data.l, FUN = function(x) {
 
    ## Not particularly realistic here, but lets pretend we can use
     ## some of the group 1 mfi values as "negative controls" 
@@ -129,6 +129,12 @@ group_via_3sd           <- function(simulated_data, param_sets) {
   
  }
  ) %>% do.call("rbind", .)
+ 
+ three_sd.g %>% mutate(
+    group = group - 1
+   , V1 = ifelse(assigned_group == 1, 1, 0)
+   , V2 = 1 - V1
+  ) %>% mutate(model = "3sd", .before = 1)
   
 }
 
@@ -140,7 +146,7 @@ group_via_mculst        <- function(simulated_data) {
  , c("param_set", "sim_num")
  )
   
- lapply(simulated_data.l, FUN = function(x) {
+mclust.g <- lapply(simulated_data.l, FUN = function(x) {
    ## !! Note: probabilities conditional on group mean and variance (which does has uncertainty)
      ## -- calculate probabilities over mclust posterior (uncertainty in what the mean and
       ## variance are among clusters)
@@ -150,6 +156,10 @@ group_via_mculst        <- function(simulated_data) {
    assigned_group = clust.fit$classification 
   )
  }) %>% do.call("rbind", .)
+ 
+mclust.g %>% mutate(
+    group = group - 1
+  ) %>% mutate(model = "mclust", .before = 1)
   
 }
 
@@ -274,6 +284,8 @@ if (model_name$model == "cluster_regression_base.stan") {
 stan_fit <- stan(
   file    = "stan_models/cluster_regression_base.stan"
 , data    = list(N = param_set$n_samps, y = simulated_data$mfi)
+, pars    = c("membership_l", "ind_sero") 
+, include = FALSE
 , chains  = 4
 , seed    = 483892929
 , refresh = 2000
@@ -288,6 +300,8 @@ stan_fit <- stan(
    N = param_set$n_samps, y = simulated_data$mfi
  , age = simulated_data$age, age_index = simulated_data$age + 1
  )
+, pars    = c("membership_l", "ind_sero") 
+, include = FALSE
 , chains  = 4
 , seed    = 483892929
 , refresh = 2000
@@ -302,6 +316,8 @@ stan_fit <- stan(
    N = param_set$n_samps, y = simulated_data$mfi
  , age = simulated_data$age, age_index = simulated_data$age + 1
  )
+, pars    = c("membership_l", "ind_sero") 
+, include = FALSE
 , chains  = 4
 , seed    = 483892929
 , refresh = 2000
@@ -345,7 +361,7 @@ return(resorted_fits)
 }
 
 ## Summarize fits
-summarize_stan_fits     <- function(model_fits, param_sets) {
+summarize_stan_fits     <- function(model_fits, param_sets, simulated_data) {
   
 for (i in 1:nrow(model_fits)) {
   
@@ -356,6 +372,11 @@ y <- param_sets %>% filter(
 
 x     <- model_fits[i, ]$fitted_model[[1]]
 samps <- rstan::extract(x[[1]])
+
+z <- simulated_data %>% filter(
+  param_set == model_fits$param_set[i]
+, sim_num   == model_fits$sim_num[i]
+)
 
 if (model_fits[i, ]$model == "cluster_regression_base.stan") {
   
@@ -371,7 +392,7 @@ true_vals <- y %>%
   mutate(beta = 1 - (beta_base*age_prop + (beta_base + beta_age_delta)*age_prop)) %>% 
   dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
-  
+
 } else if (model_fits[i, ]$model == "cluster_regression_with_beta.stan") {
   
 samps_out <- with(samps, data.frame(
@@ -432,91 +453,248 @@ out.clean.t <- left_join(true_vals, samps_out, by = "name") %>%
               mutate(param_set = as.numeric(param_set), sim_num = as.numeric(sim_num)), ., by = c("param_set", "sim_num")) %>%
   left_join(., y %>% dplyr::select(param_set, sim_num, n_samps), by = c("param_set", "sim_num"))
 
+pred_pos <- samps$membership_p %>% 
+  reshape2::melt() %>% 
+  rename(clust = Var2, samp = Var3) %>%
+  pivot_wider(values_from = value, names_from = clust) %>%
+  group_by(samp) %>%
+  summarize(
+    lwr   = quantile(`2`, 0.025)
+  , lwr_n = quantile(`2`, 0.200)
+  , mid   = quantile(`2`, 0.500)
+  , upr_n = quantile(`2`, 0.800)
+  , upr   = quantile(`2`, 0.975)
+  )
+
+z %<>% mutate(samp = seq(n()), .before = 1) %>% 
+  left_join(., pred_pos, by = "samp") %>% 
+  mutate(stan_model = model_fits[i, ]$model, .before = 1)
+
+pop_seropos <- (samps$pop_sero / y$n_samps) %>% 
+  quantile(c(0.025, 0.200, 0.500, 0.800, 0.975)) %>% 
+  t() %>% as.data.frame()
+
+names(pop_seropos) <- c("lwr", "lwr_n", "mid", "upr_n", "upr")
+
+pop_seropos %<>% 
+  mutate(
+    stan_model = model_fits[i, ]$model, .before = 1
+  , param_set  = y$param_set
+  , sim_num    = y$sim_num
+  , true       = (z %>% mutate(group = group - 1) %>% pull(group) %>% sum()) / y$n_samps
+  )
+
 if (i == 1) {
-  out.clean <- out.clean.t
+  out.clean     <- out.clean.t
+  z.f           <- z
+  pop_seropos.f <- pop_seropos
 } else {
-  out.clean <- rbind(out.clean, out.clean.t)
+  out.clean     <- rbind(out.clean, out.clean.t)
+  z.f           <- rbind(z.f, z)
+  pop_seropos.f <- rbind(pop_seropos.f, pop_seropos)
 }
 
 }
   
-return(out.clean %>% mutate(
-  cover = ifelse(true > lwr & true < upr, 1, 0)
-, CI_wid = upr - lwr
-, m_diff = abs(mid - true)
-  ))
+return(
+  list(
+  coef = out.clean %>% mutate(
+      cover = ifelse(true > lwr & true < upr, 1, 0)
+    , CI_wid = upr - lwr
+    , m_diff = abs(mid - true)
+  )
+, group_pred   = z.f %>% mutate(group = group - 1)
+, prop_seropos = pop_seropos.f
+ )
+)
 
 }
 
-## Explore coverage of the fits for the beta 
-plot_summary            <- function(stan.sum, mclust.sum, param_sets) {
+## Summarize group assignment predictions
+calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g) {
+
+  three_sd.g %<>%
+  dplyr::select(-assigned_group) %>%
+  group_by(model, param_set, sim_num, group) %>%
+  summarize(
+    prob = mean(V2)
+  ) %>% mutate(
+    quantile = "mid", .before = prob
+  )
   
-  stan_all.gg <- stan.sum %>% {
+  mclust.g %<>%
+  dplyr::select(-assigned_group) %>%
+  group_by(model, param_set, sim_num, group) %>%
+  summarize(
+    prob = mean(V2)
+  ) %>% mutate(
+    quantile = "mid", .before = prob
+  )
+  
+  stan.g %<>% rename(model = stan_model) %>%
+    dplyr::select(-c(samp, age, mfi)) %>%
+  pivot_longer(-c(model, param_set, sim_num, group)
+              , names_to = "quantile") %>%
+  group_by(model, param_set, sim_num, group, quantile) %>%
+  summarize(
+    prob = mean(value)
+  )  
+  
+  return(
+    rbind(
+      three_sd.g, mclust.g, stan.g
+      )
+    )
+  
+}
+
+## Collate and summarize population level seropositivity estimates
+calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g) {
+  
+  three_sd.g %<>% 
+    group_by(param_set, sim_num) %>% 
+    mutate(
+      group = group - 1
+    , assigned_group = assigned_group - 1
+    ) %>%
+    summarize(
+      true     = mean(group)
+    , prop_pos = mean(assigned_group)
+    ) %>% mutate(
+      prop_pos_diff = prop_pos - true 
+    ) %>% ungroup() %>% 
+    mutate(model = "3sd", .before = 1) %>%
+    mutate(quantile = "mid", .after = "true")
+  
+  mclust.g %<>% 
+    group_by(param_set, sim_num) %>% 
+    mutate(
+      group = group - 1
+    , assigned_group = assigned_group - 1
+    ) %>%
+    summarize(
+      true     = mean(group)
+    , prop_pos = sum(V2) / n()
+    ) %>% mutate(
+      prop_pos_diff = prop_pos - true 
+    ) %>% ungroup() %>% 
+    mutate(model = "mclust", .before = 1) %>%
+    mutate(quantile = "mid", .after = "true")
+  
+  stan.g %<>% 
+    pivot_longer(-c(stan_model, param_set, sim_num, true)
+                 , names_to = "quantile", values_to = "prop_pos") %>%
+    mutate(prop_pos_diff = prop_pos - true) %>%
+    rename(model = stan_model)
+    
+  all.g <- rbind(three_sd.g, mclust.g, stan.g)
+  
+  return(all.g)
+  
+}
+
+## collate_outputs
+collate_outputs         <- function(
+    pop_seropositivity, group_assignment
+  , three_sd.sum, mclust.sum, stan.sum) {
+  
+  all.out <- rbind(
+    stan.sum %>% dplyr::select(-n_samps)
+  , mclust.sum %>% relocate(model, .before = 1) %>%
+      mutate(lwr_n = NA, .after = lwr) %>% mutate(upr_n = NA, .after = mid)
+  , three_sd.sum %>% relocate(model, .before = 1) %>%
+      mutate(lwr_n = NA, .after = lwr) %>% mutate(upr_n = NA, .after = mid)
+  )
+  
+  coverage <- all.out %>% filter(name %in% c("beta_base", "beta_age")) %>%
+    group_by(param_set, model, name) %>%
+    summarize(
+      coverage = mean(cover)
+    )
+  
+  return(
+    list(
+      pop_seropositivity = pop_seropositivity
+    , group_assignment   = group_assignment
+    , coefficient_ests   = all.out
+    , coverage           = coverage
+    )
+  )
+  
+}
+
+## Explore fits for the regression coefficients 
+plot_summary            <- function(coef_ests, param_sets, coverage) {
+  
+  stan_all.gg <- coef_ests %>% filter(!grepl("3sd|mclust", model)) %>% {
     ggplot(., aes(mid, name)) + 
       geom_errorbarh(aes(xmin = lwr_n, xmax = upr_n), height = 0, linewidth = 1) +
       geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2, linewidth = 0.3) +
       geom_point(aes(true, name), colour = "firebrick3") +
-      facet_wrap(~model_name)
+      facet_wrap(~model)
   }
   
-  all.out <- rbind(
-    stan.sum %>% dplyr::select(-n_samps)
-  , mclust.sum %>% rename(model_name = model) %>% relocate(model_name, .after = "param_set") %>%
-      mutate(lwr_n = NA, .after = lwr) %>% mutate(upr_n = NA, .after = mid)
-  )
-  
-  all_out.gg <- all.out %>% filter(name %in% c("theta_age1", "theta_age2")) %>% {
-    ggplot(., aes(mid, model_name)) + 
+  all_out.gg <- coef_ests %>% filter(name %in% c("beta_base", "beta_age")) %>% {
+    ggplot(., aes(mid, model)) + 
       geom_errorbarh(aes(xmin = lwr_n, xmax = upr_n), height = 0, linewidth = 1) +
       geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2, linewidth = 0.3) +
-      geom_point(aes(true, model_name), colour = "firebrick3") +
+      geom_point(aes(true, model), colour = "firebrick3") +
       facet_wrap(~name)
   }
   
-  all_out.theta <- all.out %>% left_join(., param_sets, by = "param_set") %>%
-  filter(name %in% c("theta_age1", "theta_age2"))
+  all_out.theta <- coef_ests %>% left_join(., param_sets, by = c("param_set", "sim_num")) %>%
+   filter(name %in% c("beta_base", "beta_age"))
   
   cov1.gg <- all_out.theta %>% {
     ggplot(., aes(mu_pos_delta, cover)) + 
       geom_jitter(height = 0.05) +
-      facet_wrap(~model_name)
+      facet_wrap(~model)
   }
   
   cov2.gg <- all_out.theta %>% 
   mutate(mu_pos_delta_r = plyr::round_any(mu_pos_delta, 0.5)) %>%
-  group_by(model_name, name, mu_pos_delta_r) %>% 
+  group_by(model, name, mu_pos_delta_r) %>% 
   summarize(m_cover = mean(cover)) %>% {
     ggplot(., aes(mu_pos_delta_r, m_cover)) + 
       geom_point(size = 2) +
       geom_line() +
-      facet_grid(name~model_name)
+      facet_grid(name~model)
   }
   
   cov3.gg <- all_out.theta %>% {
     ggplot(., aes(mu_pos_delta, CI_wid)) + 
       geom_point() +
-      facet_wrap(~model_name)
+      facet_wrap(~model)
   }
   
   cov4.gg <- all_out.theta %>% {
     ggplot(., aes(mu_pos_delta, m_diff)) + 
       geom_point() +
-      facet_wrap(~model_name)
+      facet_wrap(~model)
   }
   
-  cov5.gg <- all.out %>% filter(name %in% c("theta_age1", "theta_age2")) %>%
-  left_join(., param_sets, by = "param_set") %>% 
-  arrange(desc(mu_pos_delta)) %>%
-  mutate(mu_pos_delta = factor(mu_pos_delta, levels = unique(mu_pos_delta))) %>% {
-    ggplot(., aes(mid, mu_pos_delta)) + 
-      geom_errorbarh(aes(xmin = lwr_n, xmax = upr_n), height = 0, linewidth = 1) +
-      geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2, linewidth = 0.3) +
-      geom_vline(aes(xintercept = true), colour = "firebrick3", linewidth = 0.3) +
-      facet_grid(model_name~name) +
-      xlab("Estimate") +
-      ylab("Difference in -mean- between positive/negative") +
-      theme(axis.text.y = element_text(size = 9))
-}
+  cov5.gg <- coef_ests %>% filter(name %in% c("beta_base", "beta_age")) %>%
+   left_join(., param_sets, by = c("param_set", "sim_num")) %>% 
+   arrange(desc(mu_pos_delta)) %>%
+   mutate(mu_pos_delta = factor(mu_pos_delta, levels = unique(mu_pos_delta))) %>% {
+     ggplot(., aes(mid, mu_pos_delta)) + 
+       geom_errorbarh(aes(xmin = lwr_n, xmax = upr_n), height = 0, linewidth = 1) +
+       geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2, linewidth = 0.3) +
+       geom_vline(aes(xintercept = true), colour = "firebrick3", linewidth = 0.3) +
+       facet_grid(model~name) +
+       xlab("Estimate") +
+       ylab("Difference in -mean- between positive/negative") +
+       theme(axis.text.y = element_text(size = 9))
+   }
+  
+  cov6.gg <- coverage %>%
+    ungroup() %>%
+    group_by(model, name) %>% 
+    summarize(coverage = mean(coverage)) %>% {
+    ggplot(., aes(coverage, model)) +
+    geom_point() +
+    facet_wrap(~name) 
+  }
 
   return(
     list(
@@ -527,8 +705,57 @@ plot_summary            <- function(stan.sum, mclust.sum, param_sets) {
     , cov3.gg
     , cov4.gg
     , cov5.gg
+    , cov6.gg
     )
   )
   
 }
 
+## Explore individual-level group assignments
+plot_group_assignments  <- function(group_assignment) {
+  
+group_assignment %>% 
+    ungroup() %>%
+    group_by(model, group, quantile) %>%
+    summarize(
+      lwr   = quantile(prob, 0.025)
+    , lwr_n = quantile(prob, 0.200)
+    , mid   = quantile(prob, 0.500)
+    , upr_n = quantile(prob, 0.800)
+    , upr   = quantile(prob, 0.975)
+    ) %>% filter(quantile == "mid") %>% 
+    mutate(group = as.factor(group)) %>% {
+      ggplot(., aes(mid, group)) +
+        geom_errorbar(aes(xmin = lwr_n, xmax = upr_n), linewidth = 1, width = 0) +
+        geom_errorbar(aes(xmin = lwr, xmax = upr), linewidth = 0.5, width = 0.2) +
+        geom_point() +
+        facet_wrap(~model, ncol = 1) +
+        xlab("Probability of Group 1 Affiliation") +
+        ylab("True Group Affiliation")
+    }
+  
+}
+
+## Plot population level seropositivity
+plot_pop_seropos        <- function(pop_seropositivity) {
+  
+    pop_seropositivity %>% dplyr::select(-prop_pos_diff) %>%
+    pivot_wider(c(model, param_set, sim_num, true)
+                , names_from = "quantile"
+                , values_from = "prop_pos") %>% 
+    mutate(
+      run = interaction(param_set, sim_num)
+    , sim_num = as.factor(sim_num)
+    ) %>% {
+    ggplot(., aes(mid, sim_num)) + 
+        geom_errorbar(aes(xmin = lwr_n, xmax = upr_n, colour = sim_num), linewidth = 1, width = 0) +
+        geom_errorbar(aes(xmin = lwr, xmax = upr, colour = sim_num), linewidth = 0.5, width = 0.2) +
+        geom_point(aes(colour = sim_num)) +
+        geom_vline(aes(xintercept = true, colour = sim_num)) +
+        scale_colour_brewer(palette = "Dark2") +
+        facet_grid(model~param_set) +
+        theme(axis.text.x = element_text(size = 10)) +
+        xlab("Estimate") + ylab("Simulation")
+    }
+  
+}

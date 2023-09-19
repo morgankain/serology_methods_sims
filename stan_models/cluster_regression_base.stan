@@ -47,5 +47,37 @@ model {
 
 }
 
+generated quantities {
+
+  matrix[2, N] membership_l;
+  matrix[2, N] membership_p;
+  int ind_sero[N];
+  int pop_sero;
+
+  for (n in 1:N) {
+   vector[2] beta_n;
+ 
+   beta_n[1] = beta;
+   beta_n[2] = 1 - beta;
+   vector[2] log_beta = log(beta_n); 
+
+  for (k in 1:2) {
+   log_beta[k] += normal_lpdf(y[n] | mu[k], sigma[k]);
+   membership_l[, n] = exp(log_beta);
+  } 
+
+  membership_p[1, n] = membership_l[1, n] / (membership_l[1, n] + membership_l[2, n]);
+  membership_p[2, n] = membership_l[2, n] / (membership_l[1, n] + membership_l[2, n]);
+
+  ind_sero[n] = binomial_rng(1, membership_p[2, n]);
+
+  }
+
+  pop_sero = sum(ind_sero);
+
+}
+
+
+
 
 

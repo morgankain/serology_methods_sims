@@ -90,6 +90,13 @@ fitting_targets <- tar_plan(
         simulated_data = sim.data
       )
     )
+    
+    ## then fit the regressions on these group assignments
+  , tar_target(three_sd.groups.regression,
+      fit_regression(
+        groups         = three_sd.groups
+      )
+    )
   
     ## -- Two stage via mclust and then regression
   
@@ -101,7 +108,7 @@ fitting_targets <- tar_plan(
     )
   
     ## stage two: run regression
-  , tar_target(regressions.fit, 
+  , tar_target(mculst.groups.regression, 
       fit_regression(
         groups         = mculst.groups
       )
@@ -133,11 +140,23 @@ fitting_targets <- tar_plan(
 ## Tidy up code returned by fitting targets
 cleanup_targets <- tar_plan(
   
-   ## Summarize regression fits
-   tar_target(regressions.summary,
+   ## Summarize regression fits for 3sd
+   tar_target(three_sd.groups.regression.summary,
      sort_regression(
-       fitted_regressions = regressions.fit
+       fitted_regressions = three_sd.groups.regression
      , param_sets         = sim.params
+     ) %>% mutate(
+       model = paste("3sd -- ", model, sep = "")
+     )
+   )
+  
+   ## Summarize regression fits for mclust
+ , tar_target(mculst.groups.regression.summary,
+     sort_regression(
+       fitted_regressions = mculst.groups.regression
+     , param_sets         = sim.params
+     ) %>% mutate(
+       model = paste("mclust -- ", model, sep = "")
      )
    )
   
@@ -146,20 +165,70 @@ cleanup_targets <- tar_plan(
       summarize_stan_fits(
         model_fits     = stan.fits
       , param_sets     = sim.params
+      , simulated_data = sim.data
       )
     )
+ 
+   ## Clean up individual level group ID assignment predictions
+ , tar_target(group_assignment,
+     calculate_group_assignments(
+        three_sd.g     = three_sd.groups
+      , mclust.g       = mculst.groups
+      , stan.g         = stan.summary$group_pred
+     )
+   )
+ 
+   ## Get and group estimates on population level seropositivity
+ , tar_target(pop_seropositivity,
+     calculate_population_seropositivity(
+        three_sd.g     = three_sd.groups
+      , mclust.g       = mculst.groups
+      , stan.g         = stan.summary$prop_seropos
+     )
+   )
 
 )
+
+## collate targets
+collate_targets <- tar_plan(
+  
+  ## pull together all output for convenience
+  tar_target(all.out,
+     collate_outputs(
+        pop_seropositivity = pop_seropositivity
+      , group_assignment   = group_assignment
+      , three_sd.sum       = three_sd.groups.regression.summary
+      , mclust.sum         = mculst.groups.regression.summary
+      , stan.sum           = stan.summary$coef
+     )
+   )
+  
+)
+
 
 ## plot output
 plotting_targets <- tar_plan(
   
-  ## Plot summaries
+  ## Explore fits for the regression coefficients 
   tar_target(fit.plot,
     plot_summary(
-      stan.sum   = stan.summary
-    , mclust.sum = regressions.summary
-    , param_sets = sim.params
+      coef_ests   = all.out$coefficient_ests
+    , param_sets  = sim.params
+    , coverage    = all.out$coverage
+    )
+  )
+  
+  ## Explore individual-level group assignments
+, tar_target(group_id.plot,
+    plot_group_assignments(
+      group_assignment   = group_assignment
+    )
+  )
+
+  ## Plot population level seropositivity estimates
+, tar_target(sero.plot,
+    plot_pop_seropos(
+      pop_seropositivity = pop_seropositivity
     )
   )
 
@@ -173,5 +242,6 @@ list(
 , simulation_targets
 , fitting_targets
 , cleanup_targets
+, collate_targets
 , plotting_targets
   )
