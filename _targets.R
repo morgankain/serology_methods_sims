@@ -21,15 +21,26 @@ future::plan(future.callr::callr, workers = nworker)
 ## Group of targets associated with parameter choices that the user must define
 setup_targets <- tar_plan(
   
+    ## Control complexity level of data simulation.
+    ## NOTE: setting data_complexity to 1 will ignore some parameters in "sim.params" and
+     ## make it impossible to fit certain models (those with an _2 at the end of their names)
+      ## 1: One categorical predictor affecting group identity
+       ## : One categorical predictor affecting within-group values
+      ## 2: One categorical and one continuous predictor affecting group identity
+       ## : One categorical fixed and one categorical random effect affecting group identity
+    tar_target(data_complexity, 1)
+  
     ## Establish what stan models to fit
-    tar_target(models_to_fit,
+    ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
+     ## here with _X, data_complexity >= X
+  , tar_target(models_to_fit,
       c(
-   #    "cluster_regression_base.stan"
-        "cluster_regression_with_beta.stan"
-      , "cluster_regression_with_beta_theta.stan"
+   #    "cluster_regression_base_1.stan"
+        "cluster_regression_with_beta_1.stan"
+      , "cluster_regression_with_beta_theta_1.stan"
       )
     )
-    
+   
     ## Into list for future and purrr::pmap
   , tar_target(stan_models.l, {
       data.frame(model = models_to_fit) %>% mutate(index = seq(n())) %>% split_tibble(., "index")
@@ -38,17 +49,33 @@ setup_targets <- tar_plan(
     ## Establish parameters for the simulations
   , tar_target(sim.params,
       establish_parameters(
-        n_param_sets   = 3
-      , n_sims_per_set = 2
-      , n_samps        = 1000
-      , mu_neg         = -2.75
-      , sd_neg         = 1
-      , mu_pos_delta   = c(1, 5)
-      , sd_pos_delta   = 0.5
-      , beta_base      = 0.2 ## 20% of adults are seropositive
-      , beta_age_delta = 0.2 ## 40% of juveniles are seropositive
-      , mu_theta_age   = 1
-      , age_prop       = 0.5
+        ## Complexity, which is used to make sure the correct parameters are listed here
+        complexity      = data_complexity
+        
+        ## Simulation and sample size
+      , n_param_sets     = 3
+      , n_sims_per_set   = 2
+      , n_samps          = 1000
+      
+        ## Sample composition
+         ## catx as a generic stand-in for some categorical difference in the sample
+      , cat1f_prop       = 0.5  
+      , cat2f_prop       = 0.5
+      , cat1r_count      = 10
+      , con1f_sd         = 2
+    
+        ## Group identity covariates (all on logit scale)
+      , beta_base        = -1.386294
+      , beta_cat1f_delta = 0.981
+      , beta_con1f_delta = 0.05
+      
+      , mu_neg           = -2.75
+      , sd_neg           = 1
+      , mu_pos_delta     = c(1, 5)
+      , sd_pos_delta     = 0.5
+      , theta_cat2f_mu   = 1
+      , theta_cat1r_sd   = 1
+  
      )
    )
   
@@ -61,6 +88,7 @@ simulation_targets <- tar_plan(
     tar_target(sim.data,
       simulate_data(
         param_sets = sim.params
+      , complexity = data_complexity
       )
     )
     
@@ -95,6 +123,7 @@ fitting_targets <- tar_plan(
   , tar_target(three_sd.groups.regression,
       fit_regression(
         groups         = three_sd.groups
+      , complexity     = data_complexity
       )
     )
   

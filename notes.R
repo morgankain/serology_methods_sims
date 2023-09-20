@@ -3,6 +3,8 @@
 ####
 
 ### ----- To Do starting Sep 20
+ ## Started on the complexities below today, but to do so, required quite a bit more
+  ## code infrastructure and some much better naming conventions
 
  ## Start on more complicated regressions for beta
   ## -- Framework that builds up to random / time varying in lambda
@@ -11,7 +13,6 @@
     ## -- plate random effects
     ## -- treating variation in MFI values in positive group as a random effect (e.g., by species)
     ## -- nonlinear relationship between titer and MFI
-
 
 ### ----- Things to think about
   ## -- Transform to log titer first or after logistic[?]

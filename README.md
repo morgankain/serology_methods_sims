@@ -1,9 +1,10 @@
 
 #### Most recent note/work update
 
-- September 19: Full pipeline for multiple (simple) models with
-  summaries working. Next step to explore some coverage and then start
-  expanding the complexity of the stan models
+- September 20: Moving towards more complicated stan models, but
+  requires quite a lot more code infrastructure building and an overhaul
+  to naming conventions and some other things, which is time consuming.
+  Worked on this today.
 
 ### Simulations to compare alternative methods of analyzing serology data
 

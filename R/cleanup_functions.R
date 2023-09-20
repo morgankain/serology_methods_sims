@@ -10,9 +10,12 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
   regression_sims.pred <- purrr::pmap(list(x, param_sets_sims.l), .f = function(v, w) {
     
   true_vals <- w %>%
-   dplyr::select(param_set, sim_num, beta_base, beta_age_delta) %>% 
-   mutate(beta_age = beta_base + beta_age_delta) %>%
-   dplyr::select(-beta_age_delta) %>%
+   dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta) %>% 
+   mutate(
+       beta_cat1f = plogis(beta_base + beta_cat1f_delta)
+     , beta_base  = plogis(beta_base)
+     ) %>%
+   dplyr::select(-beta_cat1f_delta) %>%
    pivot_longer(-c(param_set, sim_num), values_to = "true")
  
     pred.out <- predictorEffect("age", v[[1]]) %>% summary()
@@ -77,22 +80,22 @@ z <- simulated_data %>% filter(
 , sim_num   == model_fits$sim_num[i]
 )
 
-if (model_fits[i, ]$model == "cluster_regression_base.stan") {
+if (model_fits[i, ]$model == "cluster_regression_base_1.stan") {
   
 samps_out <- with(samps, data.frame(
     mu_base    = mu_base
   , mu_pos     = mu[, 2]
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
-  , beta       = beta
+  , beta       = 1 - beta
   ))
 
 true_vals <- y %>% 
-  mutate(beta = 1 - (beta_base*age_prop + (beta_base + beta_age_delta)*age_prop)) %>% 
+  mutate(beta = (plogis(beta_base)*cat1f_prop + (plogis(beta_base + beta_cat1f_delta)*age_prop))) %>% 
   dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
 
-} else if (model_fits[i, ]$model == "cluster_regression_with_beta.stan") {
+} else if (model_fits[i, ]$model == "cluster_regression_with_beta_1.stan") {
   
 samps_out <- with(samps, data.frame(
     mu_base    = mu_base
@@ -100,16 +103,16 @@ samps_out <- with(samps, data.frame(
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
   , beta_base  = 1 - beta_vec[, 2]
-  , beta_age   = 1 - beta_vec[, 1]
-  , beta_age_delta = beta_age_delta
+  , beta_cat1f = 1 - beta_vec[, 1]
+  , beta_cat1f_delta = beta_cat1f_delta
   ))
 
 true_vals <- y %>% 
-  mutate(beta_age = beta_base + beta_age_delta) %>% 
+  mutate(beta_cat1f = plogis(beta_base + beta_cat1f_delta)) %>% 
   dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta_age, beta_base, beta_age_delta) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
   
-} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta.stan") {
+} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_1.stan") {
   
 samps_out <- with(samps, data.frame(
     mu_base    = mu_base
@@ -117,16 +120,38 @@ samps_out <- with(samps, data.frame(
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
   , beta_base  = 1 - beta_vec[, 2]
-  , beta_age   = 1 - beta_vec[, 1]
-  , beta_age_delta = beta_age_delta
-  , mu_theta_age   = mu_theta_age
+  , beta_cat1f = 1 - beta_vec[, 1]
+  , beta_cat1f_delta = beta_cat1f_delta
+  , theta_cat2f_mu   = theta_cat2f_mu
   ))
 
 true_vals <- y %>% 
-  mutate(beta_age = beta_base + beta_age_delta) %>% 
-  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta_age, beta_base, beta_age_delta, mu_theta_age) %>% 
+  mutate(beta_cat1f = plogis(beta_base + beta_cat1f_delta)) %>% 
+  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+              , beta_cat1f, beta_base, beta_cat1f_delta, theta_cat2f_mu
+                ) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
   
+} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_2.stan") { 
+
+samps_out <- with(samps, data.frame(
+    mu_base    = mu_base
+  , mu_pos     = mu[, 2]
+  , sigma_base = sigma_base
+  , sigma_pos  = sigma[, 2]
+  , beta_base  = 1 - beta_vec[, 2]
+  , beta_cat1f = 1 - beta_vec[, 1]
+  , beta_cat1f_delta = beta_cat1f_delta
+  , theta_cat2f_mu   = theta_cat2f_mu
+  ))
+
+true_vals <- y %>% 
+  mutate(beta_cat1f = plogis(beta_base + beta_cat1f_delta)) %>% 
+  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+              , beta_cat1f, beta_base, beta_cat1f_delta, theta_cat2f_mu
+                ) %>% 
+  pivot_longer(-c(param_set, sim_num), values_to = "true")
+    
 } else {
   stop("Stan model name not known")
 }

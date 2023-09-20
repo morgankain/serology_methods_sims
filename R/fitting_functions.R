@@ -68,7 +68,7 @@ mclust.g %>%
 }
 
 ## Second phase regression models
-fit_regression          <- function(groups) {
+fit_regression          <- function(groups, complexity) {
 
 groups.l     <- groups %>% split_tibble(., c("param_set"))
 
@@ -78,10 +78,12 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
   
  regression_sims.pred <- lapply(groups.sims.l, FUN = function(y) {
     
-    y %<>% mutate(age = as.factor(age))
+   if (complexity == 1) {
+     
+    y %<>% mutate(cat1f = as.factor(cat1f))
     
     no_variance <- glm(
-      assigned_group ~ age
+      assigned_group ~ cat1f
     , family = "binomial"
     , data   = y
     )
@@ -89,11 +91,33 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
     ## !! NOTE: Uncertain about this -- check. How?
      ## !! Beta?
     with_variance <- glm(
-      V2 ~ age
+      V2 ~ cat1f
+    , family = "binomial"
+    , data   = y
+    )
+     
+   } else if (complexity == 2) {
+     
+    y %<>% mutate(cat1f = as.factor(cat1f))
+    
+    no_variance <- glm(
+      assigned_group ~ cat1f + con1f
     , family = "binomial"
     , data   = y
     )
 
+    ## !! NOTE: Uncertain about this -- check. How?
+     ## !! Beta?
+    with_variance <- glm(
+      V2 ~ cat1f + con1f
+    , family = "binomial"
+    , data   = y
+    )
+     
+   } else {
+     stop("Complexity not -yet- supported")
+   }
+   
     return(
      list(
        no_variance, with_variance
@@ -120,11 +144,14 @@ param_set      <- param_sets %>% filter(
 , sim_num   == unique(simulated_data$sim_num)
 )
 
-if (model_name$model == "cluster_regression_base.stan") {
+if (model_name$model == "cluster_regression_base_1.stan") {
   
 stan_fit <- stan(
-  file    = "stan_models/cluster_regression_base.stan"
-, data    = list(N = param_set$n_samps, y = simulated_data$mfi)
+  file    = "stan_models/cluster_regression_base_1.stan"
+, data    = list(
+  N = param_set$n_samps
+, y = simulated_data$mfi
+)
 , pars    = c("membership_l", "ind_sero") 
 , include = FALSE
 , chains  = 4
@@ -133,13 +160,15 @@ stan_fit <- stan(
 , cores   = 1
 )
 
-} else if (model_name$model == "cluster_regression_with_beta.stan") {
+} else if (model_name$model == "cluster_regression_with_beta_1.stan") {
   
 stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta.stan"
+  file    = "stan_models/cluster_regression_with_beta_1.stan"
 , data    = list(
-   N = param_set$n_samps, y = simulated_data$mfi
- , age = simulated_data$age, age_index = simulated_data$age + 1
+   N           = param_set$n_samps
+ , y           = simulated_data$mfi
+ , cat1f       = simulated_data$cat1f
+ , cat1f_index = simulated_data$cat1f + 1
  )
 , pars    = c("membership_l", "ind_sero") 
 , include = FALSE
@@ -149,13 +178,37 @@ stan_fit <- stan(
 , cores   = 1
 )
   
-} else if (model_name$model == "cluster_regression_with_beta_theta.stan") {
+} else if (model_name$model == "cluster_regression_with_beta_theta_1.stan") {
   
 stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta_theta.stan"
+  file    = "stan_models/cluster_regression_with_beta_theta_1.stan"
 , data    = list(
-   N = param_set$n_samps, y = simulated_data$mfi
- , age = simulated_data$age, age_index = simulated_data$age + 1
+   N           = param_set$n_samps
+ , y           = simulated_data$mfi
+ , cat1f       = simulated_data$cat1f
+ , cat1f_index = simulated_data$cat1f + 1
+ , cat2f       = simulated_data$cat2f
+ )
+, pars    = c("membership_l", "ind_sero") 
+, include = FALSE
+, chains  = 4
+, seed    = 483892929
+, refresh = 2000
+, cores   = 1
+)
+  
+} else if (model_name$model == "cluster_regression_with_beta_theta_2.stan") {
+  
+stan_fit <- stan(
+  file    = "stan_models/cluster_regression_with_beta_theta_2.stan"
+, data    = list(
+   N           = param_set$n_samps
+ , y           = simulated_data$mfi
+ , cat1f       = simulated_data$cat1f
+ , cat1f_index = simulated_data$cat1f + 1
+ , cat2f       = simulated_data$cat2f
+ , con1f       = simulated_data$con1f
+ , cat1r       = simulated_data$cat1r
  )
 , pars    = c("membership_l", "ind_sero") 
 , include = FALSE

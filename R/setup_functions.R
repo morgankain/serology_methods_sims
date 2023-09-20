@@ -1,13 +1,38 @@
 ## Build parameter sets from input parameter ranges
-establish_parameters    <- function(n_param_sets, ...) {
+establish_parameters    <- function(n_param_sets, complexity, ...) {
   
+if (complexity == 1) {
 needed_params      <- c(
-  "n_samps", "n_sims_per_set"
+  
+  "n_sims_per_set", "n_samps"
+  
+, "cat1f_prop", "cat2f_prop"
+
+, "beta_base", "beta_cat1f_delta"
+
 , "mu_neg", "sd_neg", "mu_pos_delta", "sd_pos_delta"
-, "beta_base", "beta_age_delta"
-, "mu_theta_age"
-, "age_prop"
+
+, "theta_cat2f_mu"
+
 )
+} else if (complexity == 2) {
+needed_params      <- c(
+  
+  "n_sims_per_set", "n_samps"
+  
+, "cat1f_prop", "cat2f_prop", "cat1r_count", "con1f_sd"
+
+, "beta_base", "beta_cat1f_delta", "beta_con1f_delta"
+
+, "mu_neg", "sd_neg", "mu_pos_delta", "sd_pos_delta"
+
+, "theta_cat2f_mu", "theta_cat1r_sd"
+
+)
+} else {
+  stop("Model complexity not yet supported")
+}
+
 model_input_params <- list(...) 
   
 if (any(needed_params %notin% names(model_input_params))) {
