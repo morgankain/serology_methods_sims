@@ -1,5 +1,5 @@
 ## Explore fits for the regression coefficients 
-plot_summary            <- function(coef_ests, param_sets, coverage) {
+plot_summary                   <- function(coef_ests, param_sets, coverage) {
   
   stan_all.gg <- coef_ests %>% filter(!grepl("3sd|mclust", model)) %>% {
     ggplot(., aes(mid, name)) + 
@@ -87,7 +87,7 @@ plot_summary            <- function(coef_ests, param_sets, coverage) {
 }
 
 ## Explore individual-level group assignments
-plot_group_assignments  <- function(group_assignment) {
+plot_group_assignment_summary  <- function(group_assignment) {
   
 group_assignment %>% 
     ungroup() %>%
@@ -112,7 +112,7 @@ group_assignment %>%
 }
 
 ## Plot population level seropositivity
-plot_pop_seropos        <- function(pop_seropositivity) {
+plot_pop_seropos               <- function(pop_seropositivity) {
   
     pop_seropositivity %>% dplyr::select(-prop_pos_diff) %>%
     pivot_wider(c(model, param_set, sim_num, true)
@@ -135,3 +135,123 @@ plot_pop_seropos        <- function(pop_seropositivity) {
   
 }
 
+## Plot individual-level group assignment probabilities
+plot_individual_group_prob     <- function(three_sd.g, mclust.g, stan.g, num_ps = 5, num_sn = 5) {
+  
+if (n_distinct(three_sd.g$param_set) > num_ps) {
+  rand_ps    <- sample(seq(n_distinct(three_sd.g$param_set)), num_ps)
+  three_sd.g %<>% filter(param_set %in% rand_ps)
+  mclust.g   %<>% filter(param_set %in% rand_ps)
+  stan.g     %<>% filter(param_set %in% rand_ps)
+}
+  
+if (n_distinct(three_sd.g$sim_num) > num_sn) {
+  rand_sn    <- sample(seq(n_distinct(three_sd.g$sim_num)), num_sn)
+  three_sd.g %<>% filter(sim_num %in% rand_sn)
+  mclust.g   %<>% filter(sim_num %in% rand_sn)
+  stan.g     %<>% filter(sim_num %in% rand_sn)
+}
+  
+three_sd.g %<>% 
+  mutate(model = "three_sd", .before = 1) %>%
+  dplyr::select(-assigned_group)
+  
+mclust.g %<>% 
+  mutate(model = "mclust", .before = 1) %>%
+  dplyr::select(-assigned_group)
+  
+gg.1 <- mclust.g %>% mutate(
+    group   = as.factor(group)
+  , sim_num = as.factor(sim_num)) %>% {
+     ggplot(., aes(mfi)) + 
+        geom_density(aes(fill = group, colour = group
+                         , group = interaction(sim_num, group)), alpha = 0.3) +
+        facet_wrap(~param_set) +
+        scale_fill_brewer(palette = "Dark2") +
+        scale_colour_brewer(palette = "Dark2") +
+     geom_jitter(data = three_sd.g %>% 
+    mutate(
+      gp    = group - V2
+    , sim_num = as.factor(sim_num)
+    ) %>% dplyr::select(-group)
+    , aes(y = gp, shape = model)
+    , height = 0.05) +
+      ylab("True Group Assignment - Prob(pos)") +
+      theme(
+        axis.text.x = element_text(size = 9)
+      , axis.text.y = element_text(size = 9)
+      , axis.title.y = element_text(size = 10)
+      )
+ }
+  
+gg.2 <- mclust.g %>% mutate(
+    group   = as.factor(group)
+  , sim_num = as.factor(sim_num)) %>% {
+     ggplot(., aes(mfi)) + 
+        geom_density(aes(fill = group, colour = group
+                         , group = interaction(sim_num, group)), alpha = 0.3) +
+        facet_wrap(~param_set) +
+        scale_fill_brewer(palette = "Dark2") +
+        scale_colour_brewer(palette = "Dark2") +
+     geom_point(data = mclust.g %>% 
+    mutate(
+      gp    = group - V2
+    , sim_num = as.factor(sim_num)
+    ), aes(y = gp, shape = model)) +
+      ylab("True Group Assignment - Prob(pos)") +
+      theme(
+        axis.text.x = element_text(size = 9)
+      , axis.text.y = element_text(size = 9)
+      , axis.title.y = element_text(size = 10)
+      )
+ }
+ 
+gg.0 <- stan.g %>% mutate(age = as.factor(age)) %>% {
+  ggplot(., aes(mfi, mid)) +
+    geom_ribbon(aes(ymin = lwr, ymax = upr, fill = stan_model
+                    , colour = stan_model, linetype = age
+                    , group = interaction(sim_num, stan_model, age)), alpha = 0.2
+                , linewidth = 0) +
+    geom_line(aes(colour = stan_model, linetype = age
+                , group = interaction(sim_num, stan_model, age))) +
+    facet_wrap(~param_set)
+  }
+  
+stan.g %<>% rename(model = stan_model) %>%
+  mutate(V1 = 1 - mid, V2 = mid) %>%
+  dplyr::select(-c(lwr, lwr_n, mid, upr_n, upr, samp))
+  
+gg.3 <- mclust.g %>% mutate(
+    group   = as.factor(group)
+  , sim_num = as.factor(sim_num)) %>% {
+     ggplot(., aes(mfi)) + 
+        geom_density(aes(fill = group, colour = group
+                         , group = interaction(sim_num, group)), alpha = 0.3) +
+        facet_wrap(~param_set) +
+        scale_fill_brewer(palette = "Dark2") +
+        scale_colour_brewer(palette = "Dark2") +
+     geom_point(data = stan.g %>% 
+    mutate(
+      gp    = group - V2
+    , sim_num = as.factor(sim_num)
+    , model = plyr::mapvalues(model, from = c("cluster_regression_with_beta_theta.stan"
+                                              , "cluster_regression_with_beta.stan")
+                              , to = c("beta
+theta", "beta"))
+    ), aes(y = gp, shape = model)) +
+      ylab("True Group Assignment - Prob(pos)") +
+      theme(
+        axis.text.x = element_text(size = 9)
+      , axis.text.y = element_text(size = 9)
+      , axis.title.y = element_text(size = 10)
+      )
+  }
+ 
+return(
+  list(
+      gridExtra::grid.arrange(gg.1, gg.2, gg.3, ncol = 1)
+    , gg.0
+  )
+)
+  
+}

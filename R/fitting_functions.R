@@ -33,6 +33,7 @@ group_via_3sd           <- function(simulated_data, param_sets) {
     group = group - 1
    , V1 = ifelse(assigned_group == 1, 1, 0)
    , V2 = 1 - V1
+   , assigned_group = assigned_group - 1
   ) %>% mutate(model = "3sd", .before = 1)
   
 }
@@ -56,9 +57,13 @@ mclust.g <- lapply(simulated_data.l, FUN = function(x) {
   )
  }) %>% do.call("rbind", .)
  
-mclust.g %>% mutate(
-    group = group - 1
-  ) %>% mutate(model = "mclust", .before = 1)
+mclust.g %>% 
+  mutate(
+    group          = group - 1
+  , assigned_group = assigned_group - 1
+  ) %>% mutate(
+    model = "mclust", .before = 1
+  )
   
 }
 
@@ -73,11 +78,7 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
   
  regression_sims.pred <- lapply(groups.sims.l, FUN = function(y) {
     
-    y %<>% 
-      mutate(
-        assigned_group = assigned_group - 1
-      , age            = as.factor(age)
-        )
+    y %<>% mutate(age = as.factor(age))
     
     no_variance <- glm(
       assigned_group ~ age

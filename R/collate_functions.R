@@ -11,7 +11,8 @@ collate_outputs         <- function(
       mutate(lwr_n = NA, .after = lwr) %>% mutate(upr_n = NA, .after = mid)
   )
   
-  coverage <- all.out %>% filter(name %in% c("beta_base", "beta_age")) %>%
+  coverage <- all.out %>% 
+    filter(name %in% c("beta_base", "beta_age")) %>%
     group_by(param_set, model, name) %>%
     summarize(
       coverage = mean(cover)

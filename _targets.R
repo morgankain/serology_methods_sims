@@ -220,8 +220,17 @@ plotting_targets <- tar_plan(
   
   ## Explore individual-level group assignments
 , tar_target(group_id.plot,
-    plot_group_assignments(
+    plot_group_assignment_summary(
       group_assignment   = group_assignment
+    )
+  )
+
+, ## Plot individual-level group assignment probabilities
+  tar_target(ind_group_prob.plot,
+    plot_individual_group_prob(
+      three_sd.g     = three_sd.groups
+    , mclust.g       = mculst.groups
+    , stan.g         = stan.summary$group_pred
     )
   )
 

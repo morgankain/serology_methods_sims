@@ -252,10 +252,6 @@ calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g) {
   
   three_sd.g %<>% 
     group_by(param_set, sim_num) %>% 
-    mutate(
-      group = group - 1
-    , assigned_group = assigned_group - 1
-    ) %>%
     summarize(
       true     = mean(group)
     , prop_pos = mean(assigned_group)
@@ -267,10 +263,6 @@ calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g) {
   
   mclust.g %<>% 
     group_by(param_set, sim_num) %>% 
-    mutate(
-      group = group - 1
-    , assigned_group = assigned_group - 1
-    ) %>%
     summarize(
       true     = mean(group)
     , prop_pos = sum(V2) / n()
