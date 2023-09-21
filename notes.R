@@ -2,16 +2,15 @@
 ## Project Notes
 ####
 
-### ----- To Do starting Sep 20
- ## Started on the complexities below today, but to do so, required quite a bit more
-  ## code infrastructure and some much better naming conventions
+### ----- To Do starting Sep 22
+ ## Double check full pipeline
+ ## Set up sims to run over the weekend
+ ## Work on better summaries across parameter sets
 
  ## Start on more complicated regressions for beta
   ## -- Framework that builds up to random / time varying in lambda
-    ## -- e.g., a few covariates, some continuous
-    ## -- machine variance[?]
-    ## -- plate random effects
-    ## -- treating variation in MFI values in positive group as a random effect (e.g., by species)
+    ## -- more complicated random effects
+    ## -- time varying predictors??
     ## -- nonlinear relationship between titer and MFI
 
 ### ----- Things to think about

@@ -42,8 +42,8 @@ model {
 
  for (n in 1:N)
    target += log_mix(beta,
-                     normal_lpdf(y[n] | mu[1], sigma[1]),
-                     normal_lpdf(y[n] | mu[2], sigma[2]));
+                     normal_lpdf(y[n] | mu[2], sigma[2]),
+                     normal_lpdf(y[n] | mu[1], sigma[1]));
 
 }
 
@@ -61,15 +61,15 @@ generated quantities {
    beta_n[2] = 1 - beta;
    vector[2] log_beta = log(beta_n); 
 
-  for (k in 1:2) {
-   log_beta[k] += normal_lpdf(y[n] | mu[k], sigma[k]);
-   membership_l[, n] = exp(log_beta);
-  } 
+   log_beta[1] += normal_lpdf(y[n] | mu[2], sigma[2]);
+   log_beta[2] += normal_lpdf(y[n] | mu[1], sigma[1]);
+   membership_l[, n] = exp(log_beta); 
+ 
 
   membership_p[1, n] = membership_l[1, n] / (membership_l[1, n] + membership_l[2, n]);
   membership_p[2, n] = membership_l[2, n] / (membership_l[1, n] + membership_l[2, n]);
 
-  ind_sero[n] = binomial_rng(1, membership_p[2, n]);
+  ind_sero[n] = binomial_rng(1, membership_p[1, n]);
 
   }
 

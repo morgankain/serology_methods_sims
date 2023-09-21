@@ -1,5 +1,5 @@
 ## organize regressions for downstream analyses
-sort_regression         <- function(fitted_regressions, param_sets) {
+sort_regression         <- function(fitted_regressions, param_sets, complexity) {
 
   param_sets.l <- param_sets %>% split_tibble(., "param_set")
   
@@ -8,6 +8,8 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
   param_sets_sims.l <- y %>% split_tibble(., "sim_num")
   
   regression_sims.pred <- purrr::pmap(list(x, param_sets_sims.l), .f = function(v, w) {
+    
+  if (complexity == 1) {
     
   true_vals <- w %>%
    dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta) %>% 
@@ -18,29 +20,97 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
    dplyr::select(-beta_cat1f_delta) %>%
    pivot_longer(-c(param_set, sim_num), values_to = "true")
  
-    pred.out <- predictorEffect("age", v[[1]]) %>% summary()
+    pred.out <- predictorEffect("cat1f", v[[1]]) %>% summary()
     pred.out <- with(pred.out, data.frame(
       lwr = lower
     , mid = effect
     , upr = upper
     )) %>% mutate(
-      name = c("beta_age", "beta_base")
+      name = c("beta_base", "beta_cat1f")
     , .before = 1
     )
     
     out1 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "no_variance")
     
-    pred.out <- predictorEffect("age", v[[2]]) %>% summary()
+    pred.out <- predictorEffect("cat1f", v[[2]]) %>% summary()
     pred.out <- with(pred.out, data.frame(
       lwr = lower
     , mid = effect
     , upr = upper
     )) %>% mutate(
-      name = c("beta_age", "beta_base")
+      name = c("beta_base", "beta_cat1f")
     , .before = 1
     )
     
     out2 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "positive_probability")
+    
+  } else if (complexity == 2) {
+    
+   true_vals <- w %>%
+     dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta, beta_con1f_delta) %>% 
+     pivot_longer(-c(param_set, sim_num), values_to = "true")
+ 
+   ci_attempt <- try(
+     {
+     confint(v[[1]])
+     }, silent = T
+   )
+   
+   if (any(class(ci_attempt) == "try-error")) {
+     pred.out <- data.frame(
+        lwr = rep(NA, 3)
+      , mid = rep(NA, 3)
+      , upr = rep(NA, 3)
+     ) %>% 
+    mutate(
+      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
+    , .before = 1
+    )
+   } else {
+     pred.out <- ci_attempt %>% as.data.frame() %>%
+      mutate(mid = coef(v[[1]])) %>% 
+      rename(lwr = "2.5 %", upr = "97.5 %") %>%
+      relocate(mid, .after = lwr) %>%
+      mutate(
+      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
+    , .before = 1
+    )
+   }
+   
+    out1 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "no_variance")
+    
+   ci_attempt <- try(
+     {
+     confint(v[[2]])
+     }, silent = T
+   )
+
+   if (any(class(ci_attempt) == "try-error")) {
+     pred.out <- data.frame(
+        lwr = rep(NA, 3)
+      , mid = rep(NA, 3)
+      , upr = rep(NA, 3)
+     ) %>% 
+    mutate(
+      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
+    , .before = 1
+    )
+   } else {
+    pred.out <- confint(v[[2]]) %>% as.data.frame() %>%
+      mutate(mid = coef(v[[2]])) %>% 
+      rename(lwr = "2.5 %", upr = "97.5 %") %>%
+      relocate(mid, .after = lwr) %>%
+      mutate(
+      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
+    , .before = 1
+    )
+   }
+    
+    out2 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "positive_probability")
+  
+  } else {
+    stop("Model complexity not -yet- supported")
+  }
     
     return(
       rbind(
@@ -87,7 +157,7 @@ samps_out <- with(samps, data.frame(
   , mu_pos     = mu[, 2]
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
-  , beta       = 1 - beta
+  , beta       = beta
   ))
 
 true_vals <- y %>% 
@@ -102,14 +172,12 @@ samps_out <- with(samps, data.frame(
   , mu_pos     = mu[, 2]
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
-  , beta_base  = 1 - beta_vec[, 2]
-  , beta_cat1f = 1 - beta_vec[, 1]
+  , beta_base  = beta_base
   , beta_cat1f_delta = beta_cat1f_delta
   ))
 
 true_vals <- y %>% 
-  mutate(beta_cat1f = plogis(beta_base + beta_cat1f_delta)) %>% 
-  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta_age, beta_base, beta_age_delta) %>% 
+  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta_base, beta_cat1f_delta) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
   
 } else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_1.stan") {
@@ -119,17 +187,16 @@ samps_out <- with(samps, data.frame(
   , mu_pos     = mu[, 2]
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
-  , beta_base  = 1 - beta_vec[, 2]
-  , beta_cat1f = 1 - beta_vec[, 1]
+  , beta_base  = beta_base
   , beta_cat1f_delta = beta_cat1f_delta
   , theta_cat2f_mu   = theta_cat2f_mu
   ))
 
 true_vals <- y %>% 
-  mutate(beta_cat1f = plogis(beta_base + beta_cat1f_delta)) %>% 
-  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
-              , beta_cat1f, beta_base, beta_cat1f_delta, theta_cat2f_mu
-                ) %>% 
+  dplyr::select(
+    param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+  , beta_base, beta_cat1f_delta, theta_cat2f_mu
+  ) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
   
 } else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_2.stan") { 
@@ -139,17 +206,19 @@ samps_out <- with(samps, data.frame(
   , mu_pos     = mu[, 2]
   , sigma_base = sigma_base
   , sigma_pos  = sigma[, 2]
-  , beta_base  = 1 - beta_vec[, 2]
-  , beta_cat1f = 1 - beta_vec[, 1]
+  , beta_base  = beta_base
   , beta_cat1f_delta = beta_cat1f_delta
   , theta_cat2f_mu   = theta_cat2f_mu
+  , theta_cat1r_sd   = theta_cat1r_sd
+  , beta_con1f_delta = beta_con1f_delta
   ))
 
 true_vals <- y %>% 
-  mutate(beta_cat1f = plogis(beta_base + beta_cat1f_delta)) %>% 
-  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
-              , beta_cat1f, beta_base, beta_cat1f_delta, theta_cat2f_mu
-                ) %>% 
+  dplyr::select(
+    param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+  , beta_base, beta_cat1f_delta, theta_cat2f_mu
+  , theta_cat1r_sd, beta_con1f_delta
+  ) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
     
 } else {
@@ -174,7 +243,8 @@ samps_out %<>%
 
 out.clean.t <- left_join(true_vals, samps_out, by = "name") %>% 
   left_join(model_fits[i, ] %>% dplyr::select(model, param_set, sim_num) %>%
-              mutate(param_set = as.numeric(param_set), sim_num = as.numeric(sim_num)), ., by = c("param_set", "sim_num")) %>%
+              mutate(param_set = as.numeric(param_set), sim_num = as.numeric(sim_num))
+            , ., by = c("param_set", "sim_num")) %>%
   left_join(., y %>% dplyr::select(param_set, sim_num, n_samps), by = c("param_set", "sim_num"))
 
 pred_pos <- samps$membership_p %>% 
@@ -183,11 +253,11 @@ pred_pos <- samps$membership_p %>%
   pivot_wider(values_from = value, names_from = clust) %>%
   group_by(samp) %>%
   summarize(
-    lwr   = quantile(`2`, 0.025)
-  , lwr_n = quantile(`2`, 0.200)
-  , mid   = quantile(`2`, 0.500)
-  , upr_n = quantile(`2`, 0.800)
-  , upr   = quantile(`2`, 0.975)
+    lwr   = quantile(`1`, 0.025)
+  , lwr_n = quantile(`1`, 0.200)
+  , mid   = quantile(`1`, 0.500)
+  , upr_n = quantile(`1`, 0.800)
+  , upr   = quantile(`1`, 0.975)
   )
 
 z %<>% mutate(samp = seq(n()), .before = 1) %>% 
@@ -238,31 +308,32 @@ return(
 calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g) {
 
   three_sd.g %<>%
-  dplyr::select(-assigned_group) %>%
-  group_by(model, param_set, sim_num, group) %>%
-  summarize(
-    prob = mean(V2)
-  ) %>% mutate(
-    quantile = "mid", .before = prob
-  )
+   dplyr::select(-assigned_group) %>%
+   group_by(model, param_set, sim_num, group) %>%
+   summarize(
+     prob = mean(V2)
+   ) %>% mutate(
+     quantile = "mid", .before = prob
+   )
   
   mclust.g %<>%
-  dplyr::select(-assigned_group) %>%
-  group_by(model, param_set, sim_num, group) %>%
-  summarize(
-    prob = mean(V2)
-  ) %>% mutate(
-    quantile = "mid", .before = prob
-  )
+   dplyr::select(-assigned_group) %>%
+   group_by(model, param_set, sim_num, group) %>%
+   summarize(
+     prob = mean(V2)
+   ) %>% mutate(
+     quantile = "mid", .before = prob
+   )
   
-  stan.g %<>% rename(model = stan_model) %>%
-    dplyr::select(-c(samp, age, mfi)) %>%
-  pivot_longer(-c(model, param_set, sim_num, group)
-              , names_to = "quantile") %>%
-  group_by(model, param_set, sim_num, group, quantile) %>%
-  summarize(
-    prob = mean(value)
-  )  
+  stan.g %<>% 
+   rename(model = stan_model) %>%
+   dplyr::select(-c(samp, cat1f, cat2f, mfi)) %>%
+   pivot_longer(-c(model, param_set, sim_num, group)
+               , names_to = "quantile") %>%
+   group_by(model, param_set, sim_num, group, quantile) %>%
+   summarize(
+     prob = mean(value)
+   )  
   
   return(
     rbind(

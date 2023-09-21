@@ -1,10 +1,14 @@
 
 #### Most recent note/work update
 
-- September 20: Moving towards more complicated stan models, but
-  requires quite a lot more code infrastructure building and an overhaul
-  to naming conventions and some other things, which is time consuming.
-  Worked on this today.
+- September 21: Full pipeline seemingly functioning with more
+  complicated model. Believe the summaries I need to calculate are
+  coded. BUT: need to work back through the full pipeline tomorrow and
+  then set up runs.
+- TO DO: Summary plots currently only dependent on a single coefficient
+  that will vary among runs, but this won’t be how parameter exploration
+  will actually work. Need to work on summary and plotting across a
+  variety of parameters
 
 ### Simulations to compare alternative methods of analyzing serology data
 

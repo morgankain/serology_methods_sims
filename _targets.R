@@ -28,18 +28,22 @@ setup_targets <- tar_plan(
        ## : One categorical predictor affecting within-group values
       ## 2: One categorical and one continuous predictor affecting group identity
        ## : One categorical fixed and one categorical random effect affecting group identity
-    tar_target(data_complexity, 1)
+    tar_target(data_complexity, 2)
   
     ## Establish what stan models to fit
     ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
      ## here with _X, data_complexity >= X
   , tar_target(models_to_fit,
-      c(
-   #    "cluster_regression_base_1.stan"
-        "cluster_regression_with_beta_1.stan"
-      , "cluster_regression_with_beta_theta_1.stan"
-      )
-    )
+      establish_models(       
+        model_set = c(
+       # "cluster_regression_base_1.stan"
+         "cluster_regression_with_beta_1.stan"
+       , "cluster_regression_with_beta_theta_1.stan"
+       , "cluster_regression_with_beta_theta_2.stan"
+       )
+     , complexity = data_complexity
+     )
+   )
    
     ## Into list for future and purrr::pmap
   , tar_target(stan_models.l, {
@@ -140,6 +144,7 @@ fitting_targets <- tar_plan(
   , tar_target(mculst.groups.regression, 
       fit_regression(
         groups         = mculst.groups
+      , complexity     = data_complexity
       )
     )
   
@@ -174,6 +179,7 @@ cleanup_targets <- tar_plan(
      sort_regression(
        fitted_regressions = three_sd.groups.regression
      , param_sets         = sim.params
+     , complexity         = data_complexity
      ) %>% mutate(
        model = paste("3sd -- ", model, sep = "")
      )
@@ -184,6 +190,7 @@ cleanup_targets <- tar_plan(
      sort_regression(
        fitted_regressions = mculst.groups.regression
      , param_sets         = sim.params
+     , complexity         = data_complexity
      ) %>% mutate(
        model = paste("mclust -- ", model, sep = "")
      )
@@ -229,6 +236,14 @@ collate_targets <- tar_plan(
       , three_sd.sum       = three_sd.groups.regression.summary
       , mclust.sum         = mculst.groups.regression.summary
       , stan.sum           = stan.summary$coef
+      , coef_name_vec      = c(
+          "beta_base"
+        , "beta_cat1f"
+        , "beta_cat1f_delta"
+        , "beta_con1f_delta"
+        , "theta_cat2f_mu"
+        , "theta_cat1r_sd"
+      )
      )
    )
   
@@ -241,9 +256,17 @@ plotting_targets <- tar_plan(
   ## Explore fits for the regression coefficients 
   tar_target(fit.plot,
     plot_summary(
-      coef_ests   = all.out$coefficient_ests
-    , param_sets  = sim.params
-    , coverage    = all.out$coverage
+      coef_ests     = all.out$coefficient_ests
+    , param_sets    = sim.params
+    , coverage      = all.out$coverage
+    , coef_name_vec = c(
+          "beta_base"
+        , "beta_cat1f"
+        , "beta_cat1f_delta"
+        , "beta_con1f_delta"
+        , "theta_cat2f_mu"
+        , "theta_cat1r_sd"
+      )  
     )
   )
   

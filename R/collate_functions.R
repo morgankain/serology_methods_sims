@@ -1,7 +1,8 @@
 ## collate_outputs
 collate_outputs         <- function(
     pop_seropositivity, group_assignment
-  , three_sd.sum, mclust.sum, stan.sum) {
+  , three_sd.sum, mclust.sum, stan.sum
+  , coef_name_vec) {
   
   all.out <- rbind(
     stan.sum %>% dplyr::select(-n_samps)
@@ -12,10 +13,10 @@ collate_outputs         <- function(
   )
   
   coverage <- all.out %>% 
-    filter(name %in% c("beta_base", "beta_age")) %>%
+    filter(name %in% coef_name_vec) %>%
     group_by(param_set, model, name) %>%
     summarize(
-      coverage = mean(cover)
+      coverage = mean(cover, na.rm = T)
     )
   
   return(

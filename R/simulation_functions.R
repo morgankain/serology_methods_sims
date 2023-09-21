@@ -40,7 +40,7 @@ lapply(param_sets, FUN = function(x) {
   mu_vec   <- with(x, c(mu_neg, mu_pos))
   sd_vec   <- with(x, c(sd_neg, sd_pos))
   rand_dev <- rnorm(x$cat1r_count, 0, x$theta_cat1r_sd)
-  
+
   data.frame(
     cat1f  = with(x, rbinom(n_samps, 1, cat1f_prop))
   , cat2f  = with(x, rbinom(n_samps, 1, cat2f_prop))

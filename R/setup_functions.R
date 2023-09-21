@@ -76,3 +76,19 @@ purrr::map_dfr(seq_len(model_input_params$n_sims_per_set), ~model_params) %>%
   
 }
 
+## Set up vector of models and check if they can be fit | chosen complexity
+establish_models        <- function(model_set, complexity) {
+  
+  min_complexities <- apply(model_set %>% matrix(), 1, FUN = function(x) {
+    tc <- strsplit(x, "[.]")[[1]][1]
+    tc <- strsplit(tc, "_")[[1]]
+    tc[length(tc)]
+  })
+  
+  if (any(min_complexities  > complexity)) {
+    stop("All models must have complexity <= data_complexity (see number directly preceeding `.stan`)")
+  } else {
+    return(model_set)
+  }
+
+}
