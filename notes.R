@@ -2,10 +2,10 @@
 ## Project Notes
 ####
 
-### ----- To Do starting Sep 22
- ## Double check full pipeline
- ## Set up sims to run over the weekend
+### ----- To Do starting Sep 25
+ ## Explore sims from over the weekend
  ## Work on better summaries across parameter sets
+ ## Strategies to fit to real data better
 
  ## Start on more complicated regressions for beta
   ## -- Framework that builds up to random / time varying in lambda

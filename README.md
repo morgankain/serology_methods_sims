@@ -1,10 +1,8 @@
 
 #### Most recent note/work update
 
-- September 21: Full pipeline seemingly functioning with more
-  complicated model. Believe the summaries I need to calculate are
-  coded. BUT: need to work back through the full pipeline tomorrow and
-  then set up runs.
+- September 22: Full pipeline checked and looking good. Large number of
+  updates to code and some models. Explored some real data.
 - TO DO: Summary plots currently only dependent on a single coefficient
   that will vary among runs, but this won’t be how parameter exploration
   will actually work. Need to work on summary and plotting across a
