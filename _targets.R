@@ -36,10 +36,10 @@ setup_targets <- tar_plan(
   , tar_target(models_to_fit,
       establish_models(       
         model_set = c(
-       # "cluster_regression_base_1.stan"
-         "cluster_regression_with_beta_1.stan"
-       , "cluster_regression_with_beta_theta_1.stan"
-       , "cluster_regression_with_beta_theta_2.stan"
+     #   "cluster_regression_base_1.stan"
+     #   "cluster_regression_with_beta_1.stan"
+         "cluster_regression_with_beta_theta_ln_1.stan"
+       , "cluster_regression_with_beta_theta_ln_2.stan"
        )
      , complexity = data_complexity
      )
@@ -69,16 +69,16 @@ setup_targets <- tar_plan(
       , con1f_sd         = 2
     
         ## Group identity covariates (all on logit scale)
-      , beta_base        = -1.386294
+      , beta_base        = c(-3, -1) #-1.386294
       , beta_cat1f_delta = 0.981
       , beta_con1f_delta = 0.05
       
-      , mu_neg           = -2.75
-      , sd_neg           = 1
-      , mu_pos_delta     = c(1, 5)
-      , sd_pos_delta     = 0.5
-      , theta_cat2f_mu   = 1
-      , theta_cat1r_sd   = 1
+      , mu_neg           = 1.0 #-2.75
+      , sd_neg           = 0.3 #1
+      , mu_pos_delta     = c(0.5, 1.5) #c(1, 5)
+      , sd_pos_delta     = 0 #0.5
+      , theta_cat2f_mu   = 0 #1
+      , theta_cat1r_sd   = 0.2 #1
   
      )
    )
@@ -202,6 +202,7 @@ cleanup_targets <- tar_plan(
         model_fits     = stan.fits
       , param_sets     = sim.params
       , simulated_data = sim.data
+      , complexity     = data_complexity
       )
     )
  

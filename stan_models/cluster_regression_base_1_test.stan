@@ -51,8 +51,6 @@ generated quantities {
 
   matrix[2, N] membership_l;
   matrix[2, N] membership_p;
-  int ind_sero[N];
-  int pop_sero;
 
   for (n in 1:N) {
 
@@ -69,11 +67,9 @@ generated quantities {
    membership_p[1, n] = membership_l[1, n] / (membership_l[1, n] + membership_l[2, n]);
    membership_p[2, n] = membership_l[2, n] / (membership_l[1, n] + membership_l[2, n]);
 
-   ind_sero[n] = binomial_rng(1, membership_p[1, n]);
-
   }
 
-   pop_sero = sum(ind_sero);
- 
 }
+
+
 

@@ -133,7 +133,7 @@ return(regression.pred %>% mutate(
 }
 
 ## Summarize stan fits
-summarize_stan_fits     <- function(model_fits, param_sets, simulated_data) {
+summarize_stan_fits     <- function(model_fits, param_sets, simulated_data, complexity) {
   
 for (i in 1:nrow(model_fits)) {
   
@@ -167,6 +167,27 @@ true_vals <- y %>%
 
 } else if (model_fits[i, ]$model == "cluster_regression_with_beta_1.stan") {
   
+if (complexity == 1) {
+  
+samps_out <- with(samps, data.frame(
+    mu_base    = mu_base
+  , mu_pos     = mu[, 2]
+  , sigma_base = sigma_base
+  , sigma_pos  = sigma[, 2]
+  , beta_base  = plogis(beta_base)
+  , beta_cat1f = plogis(beta_base + beta_cat1f_delta)
+  , beta_cat1f_delta = beta_cat1f_delta
+  ))
+
+true_vals <- y %>% 
+  mutate(
+    beta_cat1f = plogis(beta_base + beta_cat1f_delta)
+  , beta_base  = plogis(beta_base)) %>% 
+  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta_cat1f, beta_base, beta_cat1f_delta) %>% 
+  pivot_longer(-c(param_set, sim_num), values_to = "true")
+  
+} else if (complexity == 2) {
+  
 samps_out <- with(samps, data.frame(
     mu_base    = mu_base
   , mu_pos     = mu[, 2]
@@ -177,10 +198,42 @@ samps_out <- with(samps, data.frame(
   ))
 
 true_vals <- y %>% 
-  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta_base, beta_cat1f_delta) %>% 
+  dplyr::select(
+    param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+  , beta_base, beta_cat1f_delta
+  ) %>% 
+  pivot_longer(-c(param_set, sim_num), values_to = "true")  
+  
+} else {
+  stop("Complexity not -yet- supported")
+}
+  
+} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_ln_1.stan") {
+  
+if (complexity == 1) {
+  
+samps_out <- with(samps, data.frame(
+    mu_base    = mu_base
+  , mu_pos     = mu[, 2]
+  , sigma_base = sigma_base
+  , sigma_pos  = sigma[, 2]
+  , beta_base  = plogis(beta_base)
+  , beta_cat1f = plogis(beta_base + beta_cat1f_delta)
+  , beta_cat1f_delta = beta_cat1f_delta
+  , theta_cat2f_mu   = theta_cat2f_mu
+  ))
+  
+true_vals <- y %>% 
+  mutate(
+    beta_cat1f = plogis(beta_base + beta_cat1f_delta)
+  , beta_base  = plogis(beta_base)
+  ) %>% 
+  dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+              , beta_cat1f, beta_base, beta_cat1f_delta, theta_cat2f_mu
+                ) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
   
-} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_1.stan") {
+} else if (complexity == 2) {
   
 samps_out <- with(samps, data.frame(
     mu_base    = mu_base
@@ -199,14 +252,20 @@ true_vals <- y %>%
   ) %>% 
   pivot_longer(-c(param_set, sim_num), values_to = "true")
   
-} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_2.stan") { 
+} else {
+  stop("Complexity not -yet- supported")
+}
 
+  
+} else if (model_fits[i, ]$model == "cluster_regression_with_beta_theta_ln_2.stan") { 
+ 
 samps_out <- with(samps, data.frame(
-    mu_base    = mu_base
-  , mu_pos     = mu[, 2]
-  , sigma_base = sigma_base
-  , sigma_pos  = sigma[, 2]
-  , beta_base  = beta_base
+    mu_base      = mu_base
+  , mu_pos       = mu_base + mu_diff
+  , mu_pos_delta = mu_diff
+  , sigma_base   = sigma_base
+  , sigma_pos    = sigma[, 2]
+  , beta_base    = beta_base
   , beta_cat1f_delta = beta_cat1f_delta
   , theta_cat2f_mu   = theta_cat2f_mu
   , theta_cat1r_sd   = theta_cat1r_sd
@@ -215,7 +274,7 @@ samps_out <- with(samps, data.frame(
 
 true_vals <- y %>% 
   dplyr::select(
-    param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos
+    param_set, sim_num, mu_neg, mu_pos, mu_pos_delta, sd_neg, sd_pos
   , beta_base, beta_cat1f_delta, theta_cat2f_mu
   , theta_cat1r_sd, beta_con1f_delta
   ) %>% 
@@ -379,4 +438,3 @@ calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g) {
   return(all.g)
   
 }
-

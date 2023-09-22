@@ -39,7 +39,7 @@ plot_summary                   <- function(coef_ests, param_sets, coverage, coef
   }
   
   cov2.gg <- all_out.theta %>% 
-  mutate(mu_pos_delta_r = plyr::round_any(mu_pos_delta, 0.5)) %>%
+  mutate(mu_pos_delta_r = plyr::round_any(mu_pos_delta, 0.25)) %>%
   group_by(model, name, mu_pos_delta_r) %>% 
   summarize(m_cover = mean(cover)) %>% {
     ggplot(., aes(mu_pos_delta_r, m_cover)) + 

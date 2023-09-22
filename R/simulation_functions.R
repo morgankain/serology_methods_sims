@@ -41,13 +41,17 @@ lapply(param_sets, FUN = function(x) {
   sd_vec   <- with(x, c(sd_neg, sd_pos))
   rand_dev <- rnorm(x$cat1r_count, 0, x$theta_cat1r_sd)
 
-  data.frame(
+data.frame(
     cat1f  = with(x, rbinom(n_samps, 1, cat1f_prop))
   , cat2f  = with(x, rbinom(n_samps, 1, cat2f_prop))
   ) %>% mutate(
     cat1r  = with(x, sample(seq(cat1r_count), n(), replace = T))
   , con1f  = with(x, rnorm(n_samps, 0, con1f_sd))
-  ) %>% mutate(
+  ) %>% 
+  mutate( 
+    cat1r_dev = rand_dev[cat1r]
+  ) %>% 
+  mutate(
     group = rbinom(n(), 1
                    , plogis(
                       x$beta_base + 
@@ -55,10 +59,10 @@ lapply(param_sets, FUN = function(x) {
                       con1f * x$beta_con1f_delta
                      )
                    ) + 1
-  , mfi   = rnorm(n()
+  , mfi   = rlnorm(n()
                   , mu_vec[group] + 
                     (cat2f * x$theta_cat2f_mu * (group - 1)) + 
-                    rand_dev[group]
+                    cat1r_dev
                   , sd_vec[group]
                   )
   ) %>% mutate(

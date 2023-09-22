@@ -177,10 +177,10 @@ stan_fit <- stan(
 , cores   = 1
 )
   
-} else if (model_name$model == "cluster_regression_with_beta_theta_1.stan") {
+} else if (model_name$model == "cluster_regression_with_beta_theta_ln_1.stan") {
   
 stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta_theta_1.stan"
+  file    = "stan_models/cluster_regression_with_beta_theta_ln_1.stan"
 , data    = list(
    N           = param_set$n_samps
  , y           = simulated_data$mfi
@@ -195,10 +195,10 @@ stan_fit <- stan(
 , cores   = 1
 )
   
-} else if (model_name$model == "cluster_regression_with_beta_theta_2.stan") {
+} else if (model_name$model == "cluster_regression_with_beta_theta_ln_2.stan") {
   
 stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta_theta_2.stan"
+  file    = "stan_models/cluster_regression_with_beta_theta_ln_2.stan"
 , data    = list(
    N           = param_set$n_samps
  , N_cat1r     = param_set$cat1r_count
@@ -208,7 +208,7 @@ stan_fit <- stan(
  , con1f       = simulated_data$con1f
  , cat1r       = simulated_data$cat1r
  )
-, pars    = c("membership_l", "ind_sero", "log_beta", "beta_vec") 
+, pars    = c("membership_l", "ind_sero", "log_beta", "beta_vec", "theta_cat1r_eps") 
 , include = FALSE
 , chains  = 4
 , seed    = 483892929

@@ -81,8 +81,8 @@ model {
 
  for (n in 1:N) {
    target += log_mix(beta_vec[n],
-                     normal_lpdf(y[n] | mu[2, n], sigma[2]),
-                     normal_lpdf(y[n] | mu[1, n], sigma[1]));
+                     lognormal_lpdf(y[n] | mu[2, n], sigma[2]),
+                     lognormal_lpdf(y[n] | mu[1, n], sigma[1]));
  }
 
 
@@ -103,8 +103,8 @@ generated quantities {
    log_beta[1, n] = log(beta_vec[n]); 
    log_beta[2, n] = log(1 - beta_vec[n]); 
 
-   log_beta[1, n] += normal_lpdf(y[n] | mu[2, n], sigma[2]);
-   log_beta[2, n] += normal_lpdf(y[n] | mu[1, n], sigma[1]);
+   log_beta[1, n] += lognormal_lpdf(y[n] | mu[2, n], sigma[2]);
+   log_beta[2, n] += lognormal_lpdf(y[n] | mu[1, n], sigma[1]);
 
    membership_l[1, n] = exp(log_beta[1, n]); 
    membership_l[2, n] = exp(log_beta[2, n]); 
