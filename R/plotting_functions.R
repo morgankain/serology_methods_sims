@@ -156,7 +156,21 @@ group_assignment %>%
 }
 
 ## Plot population level seropositivity
-plot_pop_seropos               <- function(pop_seropositivity) {
+plot_pop_seropos               <- function(pop_seropositivity, num_ps = 3, num_sn = 5) {
+  
+if (n_distinct(pop_seropositivity$param_set) > num_ps) {
+  rand_ps    <- sample(unique(
+    pop_seropositivity %>% filter(grepl("stan", model)) %>% pull(param_set)
+    ), num_ps)
+  pop_seropositivity %<>% filter(param_set %in% rand_ps)
+}
+  
+if (n_distinct(pop_seropositivity$sim_num) > num_sn) {
+  rand_sn    <- sample(unique(
+    pop_seropositivity %>% filter(grepl("stan", model)) %>% pull(sim_num)
+    ), num_sn)
+  pop_seropositivity %<>% filter(sim_num %in% rand_sn)
+}
   
     pop_seropositivity %>% dplyr::select(-prop_pos_diff) %>%
     pivot_wider(c(model, param_set, sim_num, true)
@@ -180,7 +194,7 @@ plot_pop_seropos               <- function(pop_seropositivity) {
 }
 
 ## Plot individual-level group assignment probabilities
-plot_individual_group_prob     <- function(three_sd.g, mclust.g, stan.g, num_ps = 5, num_sn = 5) {
+plot_individual_group_prob     <- function(three_sd.g, mclust.g, stan.g, num_ps = 3, num_sn = 5) {
   
 if (n_distinct(three_sd.g$param_set) > num_ps) {
   rand_ps    <- sample(seq(n_distinct(three_sd.g$param_set)), num_ps)

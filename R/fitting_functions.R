@@ -233,7 +233,7 @@ return(stan_fit)
 
 ## ^^ Function to deal with what is returned from fit_stan_models_f to get into structure for
  ## how I built summarize_stan_fits.
-sort_stan_fits          <- function(stan_fits.l, models_to_fit) {
+sort_stan_fits          <- function(stan_fits.l) {
   ## Need a list of lists
    ## outer list is of length n-models
     ## each of these has length = n_param_sets

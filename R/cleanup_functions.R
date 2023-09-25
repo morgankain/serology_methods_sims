@@ -52,7 +52,7 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
  
    ci_attempt <- try(
      {
-     confint(v[[1]])
+     suppressMessages(confint(v[[1]]))
      }, silent = T
    )
    
@@ -81,7 +81,7 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
     
    ci_attempt <- try(
      {
-     confint(v[[2]])
+     suppressMessages(confint(v[[2]]))
      }, silent = T
    )
 
@@ -96,7 +96,7 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
     , .before = 1
     )
    } else {
-    pred.out <- confint(v[[2]]) %>% as.data.frame() %>%
+    pred.out <- suppressMessages(confint(v[[2]])) %>% as.data.frame() %>%
       mutate(mid = coef(v[[2]])) %>% 
       rename(lwr = "2.5 %", upr = "97.5 %") %>%
       relocate(mid, .after = lwr) %>%
