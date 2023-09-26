@@ -1,10 +1,10 @@
 
 #### Most recent note/work update
 
-- September 25: Some exploration despite failure of most fits to run
-  over the weekend. tar_make_future got super bogged down for a reason I
-  have not yet determined. Either way, downstream summaries as they
-  currently exist seem to be working fine.
+- September 26: Some reorganization to use cmdstanr, compile models only
+  once, and save just samples instead of the full stan model in the
+  hopes that this will resolve the issues I had with tar_make_future
+  slowing to near 0 after some hours of running
 - TO DO: Summary plots currently only dependent on a single coefficient
   that will vary among runs, but this won’t be how parameter exploration
   will actually work. Need to work on summary and plotting across a

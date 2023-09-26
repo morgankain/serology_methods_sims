@@ -92,3 +92,24 @@ establish_models        <- function(model_set, complexity) {
   }
 
 }
+
+## Compile the chosen stan models
+compile_stan_models     <- function(model_set) {
+  
+ compiled_stan_models <- model_set %>% as.list() %>% lapply(., FUN = function(x) {
+   model_path <- paste0("stan_models/", x)
+   stan_model <- cmdstanr::cmdstan_model(model_path, pedantic = FALSE)
+   return(stan_model)
+ })
+ 
+ model_storage <- tibble(
+   model = model_set
+ ) %>% mutate(
+    index = seq(n())
+  , compiled_model = compiled_stan_models
+ )
+ 
+ return(model_storage)
+    
+}
+

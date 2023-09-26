@@ -6,7 +6,7 @@ data {
   vector[N] y; 
   vector[N] cat1f;
   vector[N] cat2f;
-  int<lower = 1> cat1r[N];
+  array[N] int<lower = 1> cat1r;
   vector[N] con1f;
 
 }
@@ -24,7 +24,7 @@ parameters {
   real theta_cat2f_mu; 
 
   real<lower=0> theta_cat1r_sd;
-  real theta_cat1r_eps[N_cat1r];
+  array[N_cat1r] real theta_cat1r_eps;
 
   real beta_con1f_delta; 
 
@@ -36,7 +36,7 @@ transformed parameters {
   vector[2] sigma;
   vector[N] beta_vec;
 
-  real cat1r_dev[N_cat1r]; 
+  array[N_cat1r] real cat1r_dev; 
 
   sigma[1] = sigma_base;
   sigma[2] = sigma_base + sigma_diff; 
@@ -93,7 +93,7 @@ generated quantities {
 
   matrix[2, N] membership_l;
   matrix[2, N] membership_p;
-  int ind_sero[N];
+  array[N] int ind_sero;
   int pop_sero;
   matrix[2, N] log_beta;
 

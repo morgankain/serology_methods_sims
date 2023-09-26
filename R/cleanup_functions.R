@@ -142,8 +142,7 @@ y <- param_sets %>% filter(
 , sim_num   == model_fits$sim_num[i]
 )
 
-x     <- model_fits[i, ]$fitted_model[[1]]
-samps <- rstan::extract(x[[1]])
+samps <- model_fits[i, ]$fitted_model[[1]][[1]]
 
 z <- simulated_data %>% filter(
   param_set == model_fits$param_set[i]

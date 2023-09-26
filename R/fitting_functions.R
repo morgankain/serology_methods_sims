@@ -146,81 +146,85 @@ param_set      <- param_sets %>% filter(
 
 if (model_name$model == "cluster_regression_base_1.stan") {
   
-stan_fit <- stan(
-  file    = "stan_models/cluster_regression_base_1.stan"
-, data    = list(
-  N = param_set$n_samps
-, y = simulated_data$mfi
-)
-, pars    = c("membership_l", "ind_sero") 
-, include = FALSE
+stan_fit <- model_name$compiled_model[[1]]$sample(
+  data    = list(
+    N = param_set$n_samps
+  , y = simulated_data$mfi
+  )
 , chains  = 4
+, parallel_chains = 1
 , seed    = 483892929
 , refresh = 2000
-, cores   = 1
 )
+
+stanfit <- rstan::read_stan_csv(stan_fit$output_files())
+samps   <- rstan::extract(stanfit)
+samps   <- samps[!grepl("membership_l|ind_sero|lp_", names(samps))]
 
 } else if (model_name$model == "cluster_regression_with_beta_1.stan") {
   
-stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta_1.stan"
-, data    = list(
-   N           = param_set$n_samps
- , y           = simulated_data$mfi
- , cat1f       = simulated_data$cat1f
- )
-, pars    = c("membership_l", "ind_sero", "log_beta", "beta_vec") 
-, include = FALSE
+stan_fit <- model_name$compiled_model[[1]]$sample(
+  data    = list(
+    N           = param_set$n_samps
+  , y           = simulated_data$mfi
+  , cat1f       = simulated_data$cat1f
+  )
 , chains  = 4
+, parallel_chains = 1
 , seed    = 483892929
 , refresh = 2000
-, cores   = 1
 )
+
+stanfit <- rstan::read_stan_csv(stan_fit$output_files())
+samps   <- rstan::extract(stanfit)
+samps   <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec", names(samps))]
   
 } else if (model_name$model == "cluster_regression_with_beta_theta_ln_1.stan") {
   
-stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta_theta_ln_1.stan"
-, data    = list(
-   N           = param_set$n_samps
- , y           = simulated_data$mfi
- , cat1f       = simulated_data$cat1f
- , cat2f       = simulated_data$cat2f
- )
-, pars    = c("membership_l", "ind_sero", "log_beta", "beta_vec") 
-, include = FALSE
+stan_fit <- model_name$compiled_model[[1]]$sample(
+  data    = list(
+    N           = param_set$n_samps
+  , y           = simulated_data$mfi
+  , cat1f       = simulated_data$cat1f
+  , cat2f       = simulated_data$cat2f
+  )
 , chains  = 4
+, parallel_chains = 1
 , seed    = 483892929
 , refresh = 2000
-, cores   = 1
 )
+
+stanfit <- rstan::read_stan_csv(stan_fit$output_files())
+samps   <- rstan::extract(stanfit)
+samps   <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec", names(samps))]
   
 } else if (model_name$model == "cluster_regression_with_beta_theta_ln_2.stan") {
-  
-stan_fit <- stan(
-  file    = "stan_models/cluster_regression_with_beta_theta_ln_2.stan"
-, data    = list(
-   N           = param_set$n_samps
- , N_cat1r     = param_set$cat1r_count
- , y           = simulated_data$mfi
- , cat1f       = simulated_data$cat1f
- , cat2f       = simulated_data$cat2f
- , con1f       = simulated_data$con1f
- , cat1r       = simulated_data$cat1r
- )
-, pars    = c("membership_l", "ind_sero", "log_beta", "beta_vec", "theta_cat1r_eps") 
-, include = FALSE
+
+stan_fit <- model_name$compiled_model[[1]]$sample(
+  data    = list(
+    N           = param_set$n_samps
+  , N_cat1r     = param_set$cat1r_count
+  , y           = simulated_data$mfi
+  , cat1f       = simulated_data$cat1f
+  , cat2f       = simulated_data$cat2f
+  , con1f       = simulated_data$con1f
+  , cat1r       = simulated_data$cat1r
+  )
 , chains  = 4
+, parallel_chains = 1
 , seed    = 483892929
 , refresh = 2000
-, cores   = 1
 )
-  
+
+stanfit <- rstan::read_stan_csv(stan_fit$output_files())
+samps   <- rstan::extract(stanfit)
+samps   <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec|theta_cat1r_eps", names(samps))]
+
 } else {
   return(NULL)
 }
 
-stan_fit        <- list(stan_fit)
+stan_fit        <- list(samps)
 names(stan_fit) <- paste(
   model_name$model
 , unique(simulated_data$param_set)

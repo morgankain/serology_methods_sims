@@ -44,12 +44,14 @@ setup_targets <- tar_plan(
      , complexity = data_complexity
      )
    )
+  
+    ## Compile stan models and stick them into a tibble that becomes a list for future and purrr::pmap
+  , tar_target(stan_models.l,
+      compile_stan_models(
+        model_set = models_to_fit
+      ) %>% split_tibble(., "index")
+   )
    
-    ## Into list for future and purrr::pmap
-  , tar_target(stan_models.l, {
-      data.frame(model = models_to_fit) %>% mutate(index = seq(n())) %>% split_tibble(., "index")
-    })
-    
     ## Establish parameters for the simulations
   , tar_target(sim.params,
       establish_parameters(
@@ -57,8 +59,8 @@ setup_targets <- tar_plan(
         complexity      = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 30
-      , n_sims_per_set   = 30
+      , n_param_sets     = 3
+      , n_sims_per_set   = 2
       , n_samps          = 1000
       
         ## Sample composition
@@ -161,13 +163,10 @@ fitting_targets <- tar_plan(
     , iteration = "list"
    )
   
-  , tar_target(tar.meta, tar_meta())
-  
     ## Sort these output stan models into a sensible list object to combine with parameters for cleaning
   , tar_target(stan.fits,
       sort_stan_fits(
         stan_fits.l   = stan_fits.l
-      , models_to_fit = models_to_fit
       )
     )
   

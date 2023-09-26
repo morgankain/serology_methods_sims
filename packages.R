@@ -31,6 +31,7 @@ library(ggplot2)
 library(mclust)
 library(factoextra)
 library(rstan)
+library(cmdstanr)
 library(effects)
 
 ## Needed for internal calls in stan | targets
