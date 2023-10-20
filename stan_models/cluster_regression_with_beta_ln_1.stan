@@ -64,7 +64,7 @@ generated quantities {
 
   matrix[2, N] membership_l;
   matrix[2, N] membership_p;
-  int ind_sero[N];
+  array[N] int ind_sero;
   int pop_sero;
   matrix[2, N] log_beta;
 
