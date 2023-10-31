@@ -7,8 +7,8 @@
 
 3) Plotting the plates against each other shows that there is actually relatively little plate variation, which is really good to see. Median of about 120 across plates (looking at all viruses). Only plate that stands out being plates 5 (see above comment), which was run with only Rousettus in Kanaipur, Faripur and has quite a fat right tail, but these may in fact be true positives. Another tick for randomization as much as possible.
 
-4) To my eye, a few viruses stand out as having a few "clear" positives, HeVsG for sure and maybe CedVsG and  being  the best examples.
-	-- Curious 
+4) To my eye, a few viruses stand out as having a few "clear" positives, HeVsG for sure and maybe CedVsG being the best example.
+	-- Curious how the in-dev two-cluster model deals with essentially a few % positive
 
 5) The most odd result might be MenVN, which has some really different patterns by species. 
 	-- Is this an issue of assay differences gone awry? (e.g., wrong dilution for some?) 
