@@ -1,4 +1,4 @@
-1) On one hand, looking at for example, MenVN and  it would seem that Rousettus simply has ; however, looking at many others (e.g., HeVsG, CedVsG, EboVGP), the bulk of the Rousettus samples fall in line with the other two species. 
+1) On one hand, looking at for example, MenVN, it would seem that many Rousettus individuals simply have high MFI values; however, looking at many others (e.g., HeVsG, CedVsG, EboVGP), the bulk of the Rousettus samples fall in line with the other two species. 
 	-- So are these viruses in Rousettus common? 
 
 2) Rousettus at Kanaipur, Faripur often have quite high MFI values (across many viruses, e.g., EboVGP, MenVN, MarVGP). 
