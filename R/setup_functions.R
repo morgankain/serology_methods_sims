@@ -67,7 +67,7 @@ if (length(model_input_params.r) != 0) {
 model_params %<>% 
   dplyr::mutate(
     mu_pos = mu_neg + mu_pos_delta
-  , sd_pos = sd_neg + sd_pos_delta) %>% 
+  , sd_pos = sd_neg * sd_pos_delta) %>% 
   dplyr::mutate(param_set = seq(n()), .before = 1) %>%
   group_by(param_set)
 

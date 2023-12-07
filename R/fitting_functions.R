@@ -8,22 +8,22 @@ group_via_3sd           <- function(simulated_data, param_sets) {
  
  three_sd.g <- lapply(simulated_data.l, FUN = function(x) {
 
-   ## Not particularly realistic here, but lets pretend we can use
-    ## some of the group 1 mfi values as "negative controls" 
-     ## (until I can come up with something better)
-   sd_all <- x %>% summarize(sd_all = sd(mfi)) %>%
-     pull(sd_all)
-    
-   mean_neg <- x %>% filter(group == 1) %>% 
-     slice(sample(seq(n()), n() / 5)) %>% 
-     summarize(mean_neg = mean(mfi)) %>%
-     pull(mean_neg)
+   ## Only somewhat realistic here, but because we may not have a negative control, lets create one
+    ## by selecting 20 negative individuals as a realistically obtainable and possibly sensible
+     ## negative control set 
+   neg_set <- x %>% filter(group == 1) %>% 
+     slice(sample(seq(n()), min(20, n()))) %>% 
+     summarize(
+       mean_neg = mean(mfi)
+       , sd_neg   = sd(mfi)
+     ) %>%
+     dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
    
    x %>% mutate(
-    assigned_group = ifelse(
-      mfi > mean_neg + 3 * sd_all
-    , 2
-    , 1)
+     assigned_group = ifelse(
+       mfi > neg_set["mean_neg"] + 3 * neg_set["sd_neg"]
+       , 2
+       , 1)
    )
   
  }
@@ -80,7 +80,7 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
     
    if (complexity == 1) {
      
-    y %<>% mutate(cat1f = as.factor(cat1f))
+    y %<>% mutate(cat1f = as.factor(cat1f)) %>% mutate(ww = ifelse(V1 > V2, V1, V2))
     
     no_variance <- glm(
       assigned_group ~ cat1f
@@ -88,17 +88,16 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
     , data   = y
     )
 
-    ## !! NOTE: Uncertain about this -- check. How?
-     ## !! Beta?
     with_variance <- glm(
-      V2 ~ cat1f
+      assigned_group ~ cat1f
     , family = "binomial"
+    , weights = ww
     , data   = y
     )
      
    } else if (complexity == 2) {
      
-    y %<>% mutate(cat1f = as.factor(cat1f))
+    y %<>% mutate(cat1f = as.factor(cat1f)) %>% mutate(ww = ifelse(V1 > V2, V1, V2))
     
     no_variance <- glm(
       assigned_group ~ cat1f + con1f
@@ -106,11 +105,10 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
     , data   = y
     )
 
-    ## !! NOTE: Uncertain about this -- check. How?
-     ## !! Beta?
     with_variance <- glm(
-      V2 ~ cat1f + con1f
+      assigned_group ~ cat1f + con1f
     , family = "binomial"
+    , weights = ww
     , data   = y
     )
      

@@ -35,6 +35,16 @@ gamma_param_solve <- function(a_base, b_base, new_mean, new_var) {
   
 }
 
+## logistic functions
+logit2   <- function(L, b, k, x) {
+  L / (
+    1 + exp(-k*(x - b))
+  )
+}
+i_logit2 <- function(L, b, k, y) {
+  (log((L - y) / y) / -k) + b
+}
+
 ## ggplot theme
 theme_set(theme_bw())
 suppressWarnings(

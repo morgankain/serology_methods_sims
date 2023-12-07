@@ -28,7 +28,7 @@ setup_targets <- tar_plan(
        ## : One categorical predictor affecting within-group values
       ## 2: One categorical and one continuous predictor affecting group identity
        ## : One categorical fixed and one categorical random effect affecting group identity
-    tar_target(data_complexity, 2)
+    tar_target(data_complexity, 1)
   
     ## Establish what stan models to fit
     ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
@@ -36,10 +36,10 @@ setup_targets <- tar_plan(
   , tar_target(models_to_fit,
       establish_models(       
         model_set = c(
-     #   "cluster_regression_base_1.stan"
+         "cluster_regression_base_1.stan"
      #   "cluster_regression_with_beta_1.stan"
      #   "cluster_regression_with_beta_theta_ln_1.stan"
-         "cluster_regression_with_beta_theta_ln_2.stan"
+     #   "cluster_regression_with_beta_theta_ln_2.stan"
        )
      , complexity = data_complexity
      )
@@ -59,7 +59,7 @@ setup_targets <- tar_plan(
         complexity      = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 6
+      , n_param_sets     = 200
       , n_sims_per_set   = 1
       , n_samps          = 1000
       
@@ -71,17 +71,20 @@ setup_targets <- tar_plan(
       , con1f_sd         = 2
     
         ## Group identity covariates (all on logit scale)
-      , beta_base        = c(-3, -1) #-1.386294
-      , beta_cat1f_delta = 0.980
-      , beta_con1f_delta = 0.05
+      , beta_base        = c(-4, 0)
+      , beta_cat1f_delta = 0
+      , beta_con1f_delta = 0
       
-      , mu_neg           = 1.0 #-2.75
-      , sd_neg           = 0.3 #1
-      , mu_pos_delta     = c(0.5, 1.5) #c(1, 5)
-      , sd_pos_delta     = 0 #0.5
-      , theta_cat2f_mu   = 0 #1
-      , theta_cat1r_sd   = 0.2 #1
+      , mu_neg           = c(-5, -1)
+      , sd_neg           = c(0.1, 1) 
+      , mu_pos_delta     = c(0.5, 4)
+      , sd_pos_delta     = c(0.5, 2)
+      , theta_cat2f_mu   = 0 
+      , theta_cat1r_sd   = 0.5 
   
+      , logit_1          = 30000
+      , logit_2          = -1
+      , logit_3          = 1
      )
    )
   
@@ -207,12 +210,20 @@ cleanup_targets <- tar_plan(
       )
     )
  
+ , tar_target(stan.summary.clean,
+      summarize_stan_summary(
+        stan_summary   = stan.summary
+      , param_sets     = sim.params
+      )
+    )
+ 
    ## Clean up individual level group ID assignment predictions
  , tar_target(group_assignment,
      calculate_group_assignments(
         three_sd.g     = three_sd.groups
       , mclust.g       = mculst.groups
       , stan.g         = stan.summary$group_pred
+      , param_sets     = sim.params
      )
    )
  
@@ -222,6 +233,7 @@ cleanup_targets <- tar_plan(
         three_sd.g     = three_sd.groups
       , mclust.g       = mculst.groups
       , stan.g         = stan.summary$prop_seropos
+      , param_sets     = sim.params
      )
    )
 

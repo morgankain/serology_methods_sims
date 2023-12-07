@@ -28,11 +28,13 @@ library(tidyr)
 library(magrittr)
 library(MASS)
 library(ggplot2)
+library(GGally)
 library(mclust)
 library(factoextra)
 library(rstan)
 library(cmdstanr)
 library(effects)
+library(pomp)
 
 ## Needed for internal calls in stan | targets
 conflicted::conflicts_prefer(rstan::extract)

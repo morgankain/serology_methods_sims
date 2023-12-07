@@ -20,11 +20,12 @@ lapply(param_sets, FUN = function(x) {
                       x$beta_cat1f_delta * cat1f
                      )
                    ) + 1
-  , mfi   = rnorm(n()
-                  , mu_vec[group] + 
-                    (cat2f * x$theta_cat2f_mu * (group - 1))
-                  , sd_vec[group]
-                  )
+    , titer = rnorm(n()
+                    , mu_vec[group] + 
+                      (cat2f * x$theta_cat2f_mu * (group - 1))
+                    , sd_vec[group]
+    )
+    , mfi   = logit2(x$logit_1, x$logit_2, x$logit_3, titer)
   ) %>% mutate(
       param_set = x$param_set
     , sim_num   = x$sim_num
@@ -59,12 +60,13 @@ data.frame(
                       con1f * x$beta_con1f_delta
                      )
                    ) + 1
-  , mfi   = rlnorm(n()
-                  , mu_vec[group] + 
-                    (cat2f * x$theta_cat2f_mu * (group - 1)) + 
-                    cat1r_dev
-                  , sd_vec[group]
-                  )
+    , titer = rnorm(n()
+                    , mu_vec[group] + 
+                      (cat2f * x$theta_cat2f_mu * (group - 1)) +
+                      cat1r_dev
+                    , sd_vec[group]
+    )
+    , mfi   = logit2(x$logit_1, x$logit_2, x$logit_3, titer)
   ) %>% mutate(
       param_set = x$param_set
     , sim_num   = x$sim_num

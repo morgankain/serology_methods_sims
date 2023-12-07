@@ -160,9 +160,28 @@ samps_out <- with(samps, data.frame(
   ))
 
 true_vals <- y %>% 
-  mutate(beta = (plogis(beta_base)*cat1f_prop + (plogis(beta_base + beta_cat1f_delta)*age_prop))) %>% 
+  mutate(beta = (plogis(beta_base)*cat1f_prop + (plogis(beta_base + beta_cat1f_delta)*(1-cat1f_prop)))) %>% 
   dplyr::select(param_set, sim_num, mu_neg, mu_pos, sd_neg, sd_pos, beta) %>% 
-  pivot_longer(-c(param_set, sim_num), values_to = "true")
+  pivot_longer(-c(param_set, sim_num), values_to = "base_true")
+
+z.p <- z %>% 
+  group_by(param_set, sim_num) %>%
+  filter(group == 2) %>%
+  summarize(
+    mu_pos = mean(mfi)
+    , sd_pos = sd(mfi) 
+    , beta   = n() / nrow(z)
+  ) %>% pivot_longer(-c(param_set, sim_num), values_to = "true")
+
+z.n <- z %>% 
+  group_by(param_set, sim_num) %>%
+  filter(group == 1) %>%
+  summarize(
+    mu_neg = mean(mfi)
+    , sd_neg = sd(mfi) 
+  ) %>% pivot_longer(-c(param_set, sim_num), values_to = "true")
+
+true_vals %<>% left_join(., rbind(z.p, z.n)) %>% ungroup()
 
 } else if (model_fits[i, ]$model == "cluster_regression_with_beta_1.stan") {
   
@@ -362,36 +381,70 @@ return(
 
 }
 
+## Further cleanup of stan fits (adding summaries and adding sim parameters)
+summarize_stan_summary  <- function(stan_summary, param_sets) {
+  
+lapply(stan_summary, FUN = function(x) {
+  x %>% left_join(., param_sets %>% dplyr::select(
+    param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
+  , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
+  ))
+})
+  
+}
+
 ## Summarize group assignment predictions
-calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g) {
+calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g, param_sets) {
 
   three_sd.g %<>%
-   dplyr::select(-assigned_group) %>%
-   group_by(model, param_set, sim_num, group) %>%
-   summarize(
-     prob = mean(V2)
-   ) %>% mutate(
-     quantile = "mid", .before = prob
-   )
+    dplyr::select(-assigned_group) %>%
+    mutate(
+        false_pos = ifelse(group == 0 & V2 == 1, 1, 0)
+      , false_neg = ifelse(group == 1 & V1 == 1, 1, 0)
+    ) %>%
+    group_by(model, param_set, sim_num, group) %>%
+    summarize(
+        prob        = mean(V2)
+      , false_pos_p = length(which(false_pos == 1)) / n() 
+      , false_neg_p = length(which(false_neg == 1)) / n()
+    ) %>% mutate(
+      misclass_error_p = ifelse(group == 0, false_pos_p, false_neg_p)
+    ) %>% dplyr::select(-c(false_pos_p, false_neg_p)) %>% mutate(
+      quantile = "mid", .before = prob
+    ) %>% left_join(., param_sets %>% dplyr::select(
+        param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
+      , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
+    ))
   
   mclust.g %<>%
-   dplyr::select(-assigned_group) %>%
-   group_by(model, param_set, sim_num, group) %>%
-   summarize(
-     prob = mean(V2)
-   ) %>% mutate(
-     quantile = "mid", .before = prob
-   )
+    dplyr::select(-assigned_group) %>%
+    mutate(
+      misclass_error = ifelse(group == 0, V2, V1)
+    ) %>%
+    group_by(model, param_set, sim_num, group) %>%
+    summarize(
+        prob             = mean(V2)
+      , misclass_error_p = mean(misclass_error, na.rm = T)
+    ) %>% mutate(
+      quantile = "mid", .before = prob
+    ) %>% left_join(., param_sets %>% dplyr::select(
+      param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
+      , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
+    ))
   
   stan.g %<>% 
-   rename(model = stan_model) %>%
-   dplyr::select(-c(samp, cat1f, cat2f, mfi)) %>%
-   pivot_longer(-c(model, param_set, sim_num, group)
-               , names_to = "quantile") %>%
-   group_by(model, param_set, sim_num, group, quantile) %>%
-   summarize(
-     prob = mean(value)
-   )  
+    rename(model = stan_model) %>%
+    dplyr::select(-c(samp, cat1f, cat2f, mfi)) %>%
+    pivot_longer(-c(model, param_set, sim_num, group, titer)
+                 , names_to = "quantile") %>%
+    group_by(model, param_set, sim_num, group, quantile) %>%
+    summarize(
+      prob = mean(value)
+    ) %>% mutate(misclass_error_p = ifelse(group == 0, prob, 1 - prob)) %>%
+    left_join(., param_sets %>% dplyr::select(
+        param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
+      , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
+    ))
   
   return(
     rbind(
@@ -402,7 +455,7 @@ calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g) {
 }
 
 ## Collate and summarize population level seropositivity estimates
-calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g) {
+calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g, param_sets) {
   
   three_sd.g %<>% 
     group_by(param_set, sim_num) %>% 
@@ -432,7 +485,12 @@ calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g) {
     mutate(prop_pos_diff = prop_pos - true) %>%
     rename(model = stan_model)
     
-  all.g <- rbind(three_sd.g, mclust.g, stan.g)
+  all.g <- rbind(three_sd.g, mclust.g, stan.g) %>% left_join(
+    .
+  , param_sets %>% dplyr::select(
+     param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
+   , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
+  ))
   
   return(all.g)
   
