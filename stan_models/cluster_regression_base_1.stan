@@ -29,11 +29,11 @@ model {
 
 // --- Priors --- // 
 
- mu_base ~ normal(0, 2);
- mu_diff ~ normal(0, 2); 
+ mu_base ~ normal(0, 10000);
+ mu_diff ~ normal(0, 10000); 
 
- sigma_base ~ normal(0, 2);
- sigma_diff ~ normal(0, 2);
+ sigma_base ~ normal(0, 1000);
+ sigma_diff ~ normal(0, 1000);
 
  beta ~ beta(5, 5);
 
@@ -51,7 +51,7 @@ generated quantities {
 
   matrix[2, N] membership_l;
   matrix[2, N] membership_p;
-  int ind_sero[N];
+  array[N] int ind_sero;
   int pop_sero;
 
   for (n in 1:N) {
