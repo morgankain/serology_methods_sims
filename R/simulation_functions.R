@@ -81,6 +81,15 @@ data.frame(
   
 }
 
+## Calculate skew of the simulated distribution
+calc_skew               <- function(sim.data) {
+  sim.data %>% group_by(param_set, sim_num, group) %>%
+    summarize(
+      titer_skew = skewness(titer)
+    , mfi_skew   = skewness(mfi)
+    )
+}
+
 ## Quick and dirty plot of data -- could eventually become more complicated
 examine_data            <- function(simulated_data) {
   
@@ -102,3 +111,5 @@ if (n_distinct(interaction(simulated_data$param_set, simulated_data$sim_num)) <=
   return(data_plot)
   
 }
+
+

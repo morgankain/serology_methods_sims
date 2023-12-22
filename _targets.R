@@ -28,7 +28,7 @@ setup_targets <- tar_plan(
        ## : One categorical predictor affecting within-group values
       ## 2: One categorical and one continuous predictor affecting group identity
        ## : One categorical fixed and one categorical random effect affecting group identity
-    tar_target(data_complexity, 1)
+      tar_target(data_complexity, 1)
   
     ## Establish what stan models to fit
     ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
@@ -56,7 +56,7 @@ setup_targets <- tar_plan(
   , tar_target(sim.params,
       establish_parameters(
         ## Complexity, which is used to make sure the correct parameters are listed here
-        complexity      = data_complexity
+        complexity       = data_complexity
         
         ## Simulation and sample size
       , n_param_sets     = 200
@@ -105,6 +105,13 @@ simulation_targets <- tar_plan(
   , tar_target(simulated_data.l, {
       sim.data %>% split_tibble(., c("param_set", "sim_num"))
     })
+  
+    ## Skew of raw data
+  , tar_target(data.skew,
+      calc_skew(
+        sim.data = sim.data
+      )
+    )
   
     ## Plot raw data
   , tar_target(data_plot,

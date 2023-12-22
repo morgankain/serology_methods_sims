@@ -3,7 +3,7 @@ complexity <- 1
 param_set <- 1
 sim_num   <- 1
 
-n_samps <- 1000
+n_samps <- 3000
 
 logit_1 <- 30000
 logit_2 <- -1
@@ -19,7 +19,7 @@ theta_cat1r_sd <- 1
 
 con1f_sd    <- 2
 
-theta_cat2f_mu <- 2
+theta_cat2f_mu <- 0
 
 cat1f_prop <- 0.5
 cat2f_prop <- 0.5
@@ -38,7 +38,7 @@ simulated_data <- data.frame(
     cat1f  = rbinom(n_samps, 1, cat1f_prop)
   , cat2f  = rbinom(n_samps, 1, cat2f_prop)
  ) %>% mutate(
-    group = rbinom(n(), 1
+     group = rbinom(n(), 1
                    , plogis(
                       beta_base + beta_cat1f_delta * cat1f
                    )
@@ -96,6 +96,20 @@ simulated_data %>% group_by(cat1f, group) %>% summarize(n())
 simulated_data %>% filter(group == 2) %>% {
   ggplot(., aes(cat2f, mfi)) + geom_jitter()
 }
+
+simulated_data %>% mutate(group = as.factor(group)) %>% {
+  ggplot(., aes(x = titer)) + 
+    geom_density(aes(colour = group, fill = group), alpha = 0.3) + 
+    scale_colour_brewer(palette = "Dark2") +
+    scale_fill_brewer(palette = "Dark2") 
+}
+
+simulated_data %>% mutate(group = as.factor(group)) %>% {
+    ggplot(., aes(x = mfi)) + 
+      geom_density(aes(colour = group, fill = group), alpha = 0.3) + 
+      scale_colour_brewer(palette = "Dark2") +
+      scale_fill_brewer(palette = "Dark2")
+  }
 
 simulated_data %>% mutate(
     group = as.factor(group)

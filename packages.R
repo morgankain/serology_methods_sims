@@ -35,6 +35,7 @@ library(rstan)
 library(cmdstanr)
 library(effects)
 library(pomp)
+library(moments)
 
 ## Needed for internal calls in stan | targets
 conflicted::conflicts_prefer(rstan::extract)
