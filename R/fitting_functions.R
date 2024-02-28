@@ -1,17 +1,15 @@
 ## Determine groupings with 3sd
-group_via_3sd           <- function(simulated_data, param_sets) {
+group_via_3sd           <- function(simulated_data, param_sets, groupings) {
   
- simulated_data.l <- simulated_data %>% split_tibble(
-   .
- , c("param_set", "sim_num")
- )
+ simulated_data.l <- simulated_data %>% split_tibble(., groupings)
  
  three_sd.g <- lapply(simulated_data.l, FUN = function(x) {
 
    ## Only somewhat realistic here, but because we may not have a negative control, lets create one
     ## by selecting 20 negative individuals as a realistically obtainable and possibly sensible
      ## negative control set 
-   neg_set <- x %>% filter(group == 1) %>% 
+   neg_set_a <- x %>% 
+     filter(group == 1) %>% 
      slice(sample(seq(n()), min(20, n()))) %>% 
      summarize(
        mean_neg = mean(mfi)
@@ -19,48 +17,121 @@ group_via_3sd           <- function(simulated_data, param_sets) {
      ) %>%
      dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
    
+   ## As an alternative, lets try and model a true control (i.e., blanks or some lab colony or something like that),
+    ## which we expect to have lower MFI than many wild animals. So instead, here I sort the MFI values and then sample
+     ## 20 from the lowest 10% of MFI values
+   ## NOTE: this will obviously have a huge impact on the standard deviation, which could result in a quite different
+    ## cutoff and thus quite different designations for what is a seropositive and seronegative individual
+   ## BUT: to a large degree this is the point of the whole paper. Either of these seem defensible enough and have
+    ## large implications
+   neg_set_b <- x %>% 
+     filter(group == 1) %>% 
+     arrange(mfi) %>%
+     slice(1:(max(c(round((1/3)*n(), 1), 20)))) %>% 
+     slice(sample(seq(n()), min(20, n()))) %>%
+     summarize(
+       mean_neg = mean(mfi)
+       , sd_neg   = sd(mfi)
+     ) %>%
+     dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
+   
    x %>% mutate(
-     assigned_group = ifelse(
-       mfi > neg_set["mean_neg"] + 3 * neg_set["sd_neg"]
+     assigned_group_sample_mfi = ifelse(
+       mfi > neg_set_a["mean_neg"] + 3 * neg_set_a["sd_neg"]
        , 2
-       , 1)
-   )
+       , 1
+     )
+     , assigned_group_control_mfi = ifelse(
+       mfi > neg_set_b["mean_neg"] + 3 * neg_set_b["sd_neg"]
+       , 2
+       , 1
+     )
+   ) %>% pivot_longer(., c(assigned_group_sample_mfi, assigned_group_control_mfi)
+                     , names_to = "sd_method", values_to = "assigned_group")
   
  }
  ) %>% do.call("rbind", .)
  
  three_sd.g %>% mutate(
-    group = group - 1
-   , V1 = ifelse(assigned_group == 1, 1, 0)
-   , V2 = 1 - V1
-   , assigned_group = assigned_group - 1
-  ) %>% mutate(model = "3sd", .before = 1)
+     group  = group - 1
+   , V1     = ifelse(assigned_group == 1, 1, 0)
+   , V2     = 1 - V1
+   , assigned_group  = assigned_group - 1
+  ) %>% 
+   mutate(model = "3sd", .before = 1)
   
 }
 
 ## Determine groupings with mclust
-group_via_mculst        <- function(simulated_data) {
+group_via_mculst        <- function(simulated_data, groupings) {
   
- simulated_data.l <- simulated_data %>% split_tibble(
-   .
- , c("param_set", "sim_num")
- )
+ simulated_data.l <- simulated_data %>% split_tibble(., groupings)
   
 mclust.g <- lapply(simulated_data.l, FUN = function(x) {
-   ## !! Note: probabilities conditional on group mean and variance (which does has uncertainty)
-     ## -- calculate probabilities over mclust posterior (uncertainty in what the mean and
-      ## variance are among clusters)
-   clust.fit <- Mclust(x$mfi, G = 2, modelNames = "V", verbose = FALSE)
-   x %>% cbind(., as.data.frame(clust.fit$z)) %>% 
-  mutate(
-   assigned_group = clust.fit$classification 
-  )
- }) %>% do.call("rbind", .)
+
+  clust.fit_constrained   <- Mclust(x$mfi, G = 2, modelNames = "V", verbose = FALSE)
+  clust.fit_unconstrained <- Mclust(x$mfi, modelNames = "V", verbose = FALSE)
+  
+  dif_groups <- clust.fit_unconstrained$G - clust.fit_constrained$G
+  
+  unconstrained_z <- clust.fit_unconstrained$z
+  constrained_z   <- clust.fit_constrained$z
+  
+  unconstrained_class <- clust.fit_unconstrained$classification
+  constrained_class   <- clust.fit_constrained$classification
+  
+  if (dif_groups > 0) {
+    constrained_z <- cbind(constrained_z, matrix(data = NA, nrow = nrow(constrained_z), ncol = dif_groups))
+  }
+  if (dif_groups < 0) {
+    unconstrained_z <- cbind(unconstrained_z, matrix(data = NA, nrow = nrow(unconstrained_z), ncol = abs(dif_groups)))
+  }
+  
+  constrained_x   <- x %>% mutate(method = "constrained_mclust") %>% 
+    cbind(., as.data.frame(constrained_z)) %>% 
+    mutate(assigned_group = constrained_class)
+  
+  unconstrained_x <- x %>% mutate(method = "unconstrained_mclust") %>% 
+    cbind(., as.data.frame(unconstrained_z)) %>% 
+    mutate(assigned_group = unconstrained_class)
+  
+  rbind(constrained_x, unconstrained_x)
+   
+ })
+
+max_v <- lapply(mclust.g, FUN = function(x) {
+  x %>% dplyr::select(contains("V")) %>% ncol()
+}) %>% unlist() %>% max()
+
+mclust.g.c <- lapply(mclust.g, FUN = function(x) {
+  t_num       <- x %>% dplyr::select(contains("V")) %>% ncol()
+  if (t_num < max_v) {
+    needed_cols <- paste("V", seq((t_num + 1), (t_num + (max_v - t_num))), sep = "")
+    highest_v   <- paste("V", t_num, sep = "")
+    for (i in seq_along(needed_cols)){
+      x %<>% mutate(
+        !!needed_cols[i] := NA
+        , .after = highest_v
+      )
+      highest_v <- needed_cols[i]
+    } 
+  }
+  x
+}) %>% do.call("rbind", .) 
+
+## Want to retain all of the raw probabilities for all the unconstrained groups to make the point about
+ ## an unconstrained cluster model, but fundamentally the goal here is to compare non-exposure to exposure
+  ## (we could think about this as a coarse / hacky way of getting "no exposure" vs "varying levels of exposure")
+   ## so still want to collapse YES vs NO for the unconstrained cluster model for the purpose of comparing to the
+    ## rest of the methods. While this could conceivably be done in a number of ways, we don't want the permutations
+     ## to become --too-- large here, so here we simply compare the first to all other clusters
+      ## (but again, retaining the raw cluster probabilities to make a different point later)
  
-mclust.g %>% 
+mclust.g.c %>% 
   mutate(
     group          = group - 1
   , assigned_group = assigned_group - 1
+  , assigned_group = ifelse(assigned_group > 0, 1, 0)
   ) %>% mutate(
     model = "mclust", .before = 1
   )
@@ -68,60 +139,55 @@ mclust.g %>%
 }
 
 ## Second phase regression models
-fit_regression          <- function(groups, complexity) {
+fit_regression          <- function(groupings, gam_formula, complexity, groupings1, groupings2, method) {
 
-groups.l     <- groups %>% split_tibble(., c("param_set"))
+groups.l     <- groupings %>% split_tibble(., groupings1)
 
 regression.pred <- lapply(groups.l, FUN = function(x) {
 
-  groups.sims.l <- x %>% split_tibble(., "sim_num")
+  groups.sims.l <- x %>% split_tibble(., groupings2)
   
  regression_sims.pred <- lapply(groups.sims.l, FUN = function(y) {
     
-   if (complexity == 1) {
+     if (method == "mclust") {
+       
+       which_cols <- grep("V", names(y))[-1]
+       
+       y %<>% mutate(
+         V2    = rowSums(.[which_cols], na.rm = T)
+         , cat1f = as.factor(cat1f)
+         , ww    = ifelse(V1 > V2, V1, V2)
+       )
+       
+       no_variance <- glm(
+           formula = gam_formula %>% as.formula()
+         , family = "binomial"
+         , data   = y
+       )
+      
+       with_variance <- glm(
+           formula = gam_formula %>% as.formula()
+         , family  = "binomial"
+         , weights = ww
+         , data    = y
+       )
+       
+       return(list(no_variance, with_variance))
+       
+     } else if (method == "sd") {
+       
+       no_variance <- glm(
+           formula = gam_formula %>% as.formula()
+         , family = "binomial"
+         , data   = y
+       )
+       
+       return(list(no_variance))
+       
+     } else {
+       stop("method not supported")
+     }
      
-    y %<>% mutate(cat1f = as.factor(cat1f)) %>% mutate(ww = ifelse(V1 > V2, V1, V2))
-    
-    no_variance <- glm(
-      assigned_group ~ cat1f
-    , family = "binomial"
-    , data   = y
-    )
-
-    with_variance <- glm(
-      assigned_group ~ cat1f
-    , family = "binomial"
-    , weights = ww
-    , data   = y
-    )
-     
-   } else if (complexity == 2) {
-     
-    y %<>% mutate(cat1f = as.factor(cat1f)) %>% mutate(ww = ifelse(V1 > V2, V1, V2))
-    
-    no_variance <- glm(
-      assigned_group ~ cat1f + con1f
-    , family = "binomial"
-    , data   = y
-    )
-
-    with_variance <- glm(
-      assigned_group ~ cat1f + con1f
-    , family = "binomial"
-    , weights = ww
-    , data   = y
-    )
-     
-   } else {
-     stop("Complexity not -yet- supported")
-   }
-   
-    return(
-     list(
-       no_variance, with_variance
-     )
-    )
-    
   })
   
   return(regression_sims.pred)
@@ -227,6 +293,7 @@ names(stan_fit) <- paste(
   model_name$model
 , unique(simulated_data$param_set)
 , unique(simulated_data$sim_num)
+, unique(simulated_data$log_mfi)
 , sep = " -- ")
 
 return(stan_fit)
@@ -246,7 +313,7 @@ sort_stan_fits          <- function(stan_fits.l) {
 fit_details <- lapply(model_names %>% as.list(), FUN = function(x) {
    strsplit(x, " -- ") %>% unlist() %>% t() %>% as.data.frame()
   }) %>% do.call("rbind", .) %>% 
-  rename(model = V1, param_set = V2, sim_num = V3) %>% as_tibble()
+  rename(model = V1, param_set = V2, sim_num = V3, log_mfi = V4) %>% as_tibble()
 
 resorted_fits <- fit_details %>% mutate(fitted_model = stan_fits.l)
  

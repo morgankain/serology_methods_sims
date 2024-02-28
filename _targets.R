@@ -11,8 +11,8 @@ for (f in list.files(here::here("R"), full.names = TRUE)) source (f)
 # Setup  ------------------------------------------------------------
 
 ## Setup for future package for parallelization. This is the max allowable number of workers
-nworker <- 6
-nthread <- 6
+nworker <- 5
+nthread <- 5
 future::plan(list(tweak(future.callr::callr, workers = nworker), tweak(future.callr::callr, workers = nthread)))
 future::plan(future.callr::callr, workers = nworker)
 
@@ -28,7 +28,7 @@ setup_targets <- tar_plan(
        ## : One categorical predictor affecting within-group values
       ## 2: One categorical and one continuous predictor affecting group identity
        ## : One categorical fixed and one categorical random effect affecting group identity
-      tar_target(data_complexity, 1)
+      tar_target(data_complexity, 2)
   
     ## Establish what stan models to fit
     ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
@@ -54,13 +54,13 @@ setup_targets <- tar_plan(
    
     ## Establish parameters for the simulations
   , tar_target(sim.params,
-      establish_parameters(
+      establish_parameters_for_pub(
         ## Complexity, which is used to make sure the correct parameters are listed here
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 200
-      , n_sims_per_set   = 1
+      , n_param_sets     = 5#20#100
+      , n_sims_per_set   = 4#20
       , n_samps          = 1000
       
         ## Sample composition
@@ -69,18 +69,22 @@ setup_targets <- tar_plan(
       , cat2f_prop       = 0.5
       , cat1r_count      = 10
       , con1f_sd         = 2
+      , con2f_sd         = 2
     
         ## Group identity covariates (all on logit scale)
       , beta_base        = c(-4, 0)
-      , beta_cat1f_delta = 0
-      , beta_con1f_delta = 0
+      , beta_cat1f_delta = c(0.2, 2)
+      , beta_cat2f_delta = c(0.2, 2)
+      , beta_con1f_delta = c(0.1, 1)
       
-      , mu_neg           = c(-5, -1)
-      , sd_neg           = c(0.1, 1) 
-      , mu_pos_delta     = c(0.5, 4)
-      , sd_pos_delta     = c(0.5, 2)
-      , theta_cat2f_mu   = 0 
-      , theta_cat1r_sd   = 0.5 
+      , mu_neg            = c(-5, -1)
+      , sd_neg            = c(0.2, 1) 
+      , mu_pos_delta      = c(0.5, 4)
+      , sd_pos_delta      = c(0, 2)
+      , theta_con2f_delta = c(0, 0.5)
+    #  , theta_con1f_delta = c(0.1, 1)
+    #  , theta_cat2f_mu   = 0 
+    #  , theta_cat1r_sd   = 0.5 
   
       , logit_1          = 30000
       , logit_2          = -1
@@ -95,15 +99,17 @@ simulation_targets <- tar_plan(
   
     ## Simulate data
     tar_target(sim.data,
-      simulate_data(
+     simulate_data_for_pub(
         param_sets = sim.params
       , complexity = data_complexity
-      )
+      ## take the log of the data in every simulation -- will fit to both
+      ) %>% mutate(log_mfi = log(mfi)) %>% 
+        pivot_longer(., c(mfi, log_mfi), names_to = "log_mfi", values_to = "mfi")
     )
     
     ## Into list for future and purrr::pmap
   , tar_target(simulated_data.l, {
-      sim.data %>% split_tibble(., c("param_set", "sim_num"))
+      sim.data %>% split_tibble(., c("param_set", "sim_num", "log_mfi"))
     })
   
     ## Skew of raw data
@@ -132,14 +138,28 @@ fitting_targets <- tar_plan(
     tar_target(three_sd.groups,
       group_via_3sd(
         simulated_data = sim.data
+      , param_sets     = sim.params
+      , groupings      = c("param_set", "sim_num", "log_mfi")
       )
     )
     
     ## then fit the regressions on these group assignments
   , tar_target(three_sd.groups.regression,
       fit_regression(
-        groups         = three_sd.groups
-      , complexity     = data_complexity
+        groupings    = three_sd.groups
+      , gam_formula  = {
+        if (data_complexity == 1) {
+          "assigned_group ~ cat1f"
+        } else if (data_complexity == 2) {
+          "assigned_group ~ cat1f + cat2f + con1f"
+        } else {
+          NULL
+        }
+      }
+      , complexity   = data_complexity
+      , groupings1   = c("param_set")
+      , groupings2   = c("log_mfi", "sim_num", "sd_method")
+      , method       = "sd"
       )
     )
   
@@ -149,14 +169,27 @@ fitting_targets <- tar_plan(
   , tar_target(mculst.groups,
       group_via_mculst(
         simulated_data = sim.data
+      , groupings      = c("param_set", "sim_num", "log_mfi")
       )
     )
-  
+
     ## stage two: run regression
   , tar_target(mculst.groups.regression, 
       fit_regression(
-        groups         = mculst.groups
-      , complexity     = data_complexity
+        groupings    = mculst.groups
+      , gam_formula  = {
+        if (data_complexity == 1) {
+          "assigned_group ~ cat1f"
+        } else if (data_complexity == 2) {
+          "assigned_group ~ cat1f + cat2f + con1f"
+        } else {
+          NULL
+        }
+      }
+      , complexity   = data_complexity
+      , groupings1   = c("param_set")
+      , groupings2   = c("log_mfi", "sim_num", "method")
+      , method       = "mclust"
       )
     )
   
@@ -191,6 +224,8 @@ cleanup_targets <- tar_plan(
        fitted_regressions = three_sd.groups.regression
      , param_sets         = sim.params
      , complexity         = data_complexity
+     , groupings1         = c("param_set")
+     , groupings2         = c("log_mfi", "sim_num", "method")
      ) %>% mutate(
        model = paste("3sd -- ", model, sep = "")
      )
@@ -202,6 +237,8 @@ cleanup_targets <- tar_plan(
        fitted_regressions = mculst.groups.regression
      , param_sets         = sim.params
      , complexity         = data_complexity
+     , groupings1         = c("param_set")
+     , groupings2         = c("log_mfi", "sim_num", "method")
      ) %>% mutate(
        model = paste("mclust -- ", model, sep = "")
      )

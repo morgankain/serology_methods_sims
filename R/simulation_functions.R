@@ -81,11 +81,56 @@ data.frame(
   
 }
 
+## Modification of simulation function specifically for simulations for publication
+simulate_data_for_pub   <- function(param_sets, complexity) {
+  
+  param_sets %<>% split_tibble(., c("param_set", "sim_num"))
+  
+    lapply(param_sets, FUN = function(x) {
+      
+      mu_vec   <- with(x, c(mu_neg, mu_pos))
+      sd_vec   <- with(x, c(sd_neg, sd_pos))
+      
+      data.frame(
+          cat1f  = with(x, rbinom(n_samps, 1, cat1f_prop))
+        , cat2f  = with(x, rbinom(n_samps, 1, cat2f_prop))
+      ) %>% mutate(
+          con1f  = with(x, rnorm(n_samps, 0, con1f_sd))
+        , con2f  = with(x, rnorm(n_samps, 0, con2f_sd))
+      ) %>% 
+        mutate(
+          group = rbinom(n(), 1
+                         , plogis(
+                           x$beta_base + 
+                             x$beta_cat1f_delta * cat1f +
+                             x$beta_cat2f_delta * cat2f +
+                             con1f * x$beta_con1f_delta
+                         )
+          ) + 1
+          , titer = rnorm(n()
+                          , mu_vec[group] + 
+                            (con2f * x$theta_con2f_delta * (group - 1))
+                          , sd_vec[group]
+          )
+          , mfi   = logit2(x$logit_1, x$logit_2, x$logit_3, titer)
+        ) %>% mutate(
+          param_set = x$param_set
+          , sim_num   = x$sim_num
+          , .before   = 1
+        )
+      
+    }) %>% do.call("rbind", .)
+    
+}
+
 ## Calculate skew of the simulated distribution
 calc_skew               <- function(sim.data) {
-  sim.data %>% group_by(param_set, sim_num, group) %>%
+  sim.data %>% 
+    group_by(param_set, sim_num, group, log_mfi) %>%
     summarize(
-      titer_skew = skewness(titer)
+      titer_var  = var(titer)
+    , titer_skew = skewness(titer)
+    , mfi_var    = var(mfi)
     , mfi_skew   = skewness(mfi)
     )
 }

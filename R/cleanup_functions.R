@@ -1,122 +1,90 @@
 ## organize regressions for downstream analyses
-sort_regression         <- function(fitted_regressions, param_sets, complexity) {
+sort_regression         <- function(fitted_regressions, param_sets, complexity, groupings1, groupings2) {
 
-  param_sets.l <- param_sets %>% split_tibble(., "param_set")
+  param_sets.l <- param_sets %>% split_tibble(., groupings1)
   
 regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = function(x, y) {
   
   param_sets_sims.l <- y %>% split_tibble(., "sim_num")
   
-  regression_sims.pred <- purrr::pmap(list(x, param_sets_sims.l), .f = function(v, w) {
-    
-  if (complexity == 1) {
-    
-  true_vals <- w %>%
-   dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta) %>% 
-   mutate(
-       beta_cat1f = plogis(beta_base + beta_cat1f_delta)
-     , beta_base  = plogis(beta_base)
-     ) %>%
-   dplyr::select(-beta_cat1f_delta) %>%
-   pivot_longer(-c(param_set, sim_num), values_to = "true")
- 
-    pred.out <- predictorEffect("cat1f", v[[1]]) %>% summary()
-    pred.out <- with(pred.out, data.frame(
-      lwr = lower
-    , mid = effect
-    , upr = upper
-    )) %>% mutate(
-      name = c("beta_base", "beta_cat1f")
-    , .before = 1
-    )
-    
-    out1 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "no_variance")
-    
-    pred.out <- predictorEffect("cat1f", v[[2]]) %>% summary()
-    pred.out <- with(pred.out, data.frame(
-      lwr = lower
-    , mid = effect
-    , upr = upper
-    )) %>% mutate(
-      name = c("beta_base", "beta_cat1f")
-    , .before = 1
-    )
-    
-    out2 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "positive_probability")
-    
-  } else if (complexity == 2) {
-    
-   true_vals <- w %>%
-     dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta, beta_con1f_delta) %>% 
-     pivot_longer(-c(param_set, sim_num), values_to = "true")
- 
-   ci_attempt <- try(
-     {
-     suppressMessages(confint(v[[1]]))
-     }, silent = T
-   )
-   
-   if (any(class(ci_attempt) == "try-error")) {
-     pred.out <- data.frame(
-        lwr = rep(NA, 3)
-      , mid = rep(NA, 3)
-      , upr = rep(NA, 3)
-     ) %>% 
-    mutate(
-      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
-    , .before = 1
-    )
-   } else {
-     pred.out <- ci_attempt %>% as.data.frame() %>%
-      mutate(mid = coef(v[[1]])) %>% 
-      rename(lwr = "2.5 %", upr = "97.5 %") %>%
-      relocate(mid, .after = lwr) %>%
-      mutate(
-      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
-    , .before = 1
-    )
-   }
-   
-    out1 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "no_variance")
-    
-   ci_attempt <- try(
-     {
-     suppressMessages(confint(v[[2]]))
-     }, silent = T
-   )
-
-   if (any(class(ci_attempt) == "try-error")) {
-     pred.out <- data.frame(
-        lwr = rep(NA, 3)
-      , mid = rep(NA, 3)
-      , upr = rep(NA, 3)
-     ) %>% 
-    mutate(
-      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
-    , .before = 1
-    )
-   } else {
-    pred.out <- suppressMessages(confint(v[[2]])) %>% as.data.frame() %>%
-      mutate(mid = coef(v[[2]])) %>% 
-      rename(lwr = "2.5 %", upr = "97.5 %") %>%
-      relocate(mid, .after = lwr) %>%
-      mutate(
-      name = c("beta_base", "beta_cat1f_delta", "beta_con1f_delta")
-    , .before = 1
-    )
-   }
-    
-    out2 <- left_join(true_vals, pred.out, by = "name") %>% mutate(model = "positive_probability")
+  regression_fits <- names(x) %>% matrix() %>% apply(., 1, FUN = function(xx) {
+    xx %>% strsplit(., "[.]") %>% unlist() %>% t() %>% as.data.frame() 
+  }) %>% 
+    do.call("rbind", .) %>% 
+    mutate(index = seq(n())) %>%
+    rename(log_mfi = 1, sim_num = 2, method = 3) %>% 
+    mutate(sim_num = as.numeric(sim_num)) %>%
+    left_join(., y, by = "sim_num") %>% 
+    split_tibble(., groupings2)
   
-  } else {
-    stop("Model complexity not -yet- supported")
-  }
+  regression_sims.pred <- purrr::pmap(list(x, regression_fits), .f = function(v, w) {
     
-    return(
-      rbind(
-        out1, out2
+    true_vals <- w %>%
+      dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta, beta_con1f_delta) %>% 
+      pivot_longer(-c(param_set, sim_num), values_to = "true")
+    
+    for (vv in 1:length(v)) {
+      
+      t_name <- paste("out", vv, sep = "")
+      
+      ci_attempt <- try(
+        {
+          suppressMessages(confint(v[[vv]]))
+        }, silent = T
       )
-    )
+      
+      if (any(class(ci_attempt) == "try-error")) {
+        pred.out <- data.frame(
+            lwr = rep(NA, 4)
+          , mid = rep(NA, 4)
+          , upr = rep(NA, 4)
+        ) %>% 
+          mutate(
+            name = c("beta_base", "beta_cat1f_delta", "beta_cat2f_delta", "beta_con1f_delta")
+            , .before = 1
+          )
+      } else {
+        if (complexity == 1) {
+          pred.out <- ci_attempt %>% as.data.frame() %>%
+            mutate(mid = coef(v[[vv]])) %>% 
+            rename(lwr = "2.5 %", upr = "97.5 %") %>%
+            relocate(mid, .after = lwr) %>%
+            mutate(
+              name = c("beta_base", "beta_cat1f_delta")
+              , .before = 1
+            )
+        } else {
+          pred.out <- ci_attempt %>% as.data.frame() %>%
+            mutate(mid = coef(v[[vv]])) %>% 
+            rename(lwr = "2.5 %", upr = "97.5 %") %>%
+            relocate(mid, .after = lwr) %>%
+            mutate(
+              name = c("beta_base", "beta_cat1f_delta", "beta_cat2f_delta", "beta_con1f_delta")
+              , .before = 1
+            )
+        }
+      }
+      
+      yes_var <- ifelse(vv == 1, "no_variance", "variance")
+      
+      assign(t_name, left_join(
+        w %>% dplyr::select(log_mfi, sim_num, param_set, method)
+        , true_vals
+        , by = c("param_set", "sim_num")
+      ) %>% left_join(
+        .
+        , pred.out
+        , by = "name"
+      ) %>% mutate(model = yes_var, .after = "method")
+      )
+      
+    }
+    
+    if (length(v) == 1) {
+      return(out1)
+    } else {
+      return(rbind(out1, out2))
+    }
     
   }) %>% do.call("rbind", .)
     
