@@ -129,7 +129,8 @@ mclust.g.c <- lapply(mclust.g, FUN = function(x) {
  
 mclust.g.c %>% 
   mutate(
-    group          = group - 1
+    V2_adj         = 1 - V1
+  , group          = group - 1
   , assigned_group = assigned_group - 1
   , assigned_group = ifelse(assigned_group > 0, 1, 0)
   ) %>% mutate(
@@ -149,15 +150,14 @@ regression.pred <- lapply(groups.l, FUN = function(x) {
   
  regression_sims.pred <- lapply(groups.sims.l, FUN = function(y) {
     
+     y %<>% mutate(
+         cat1f = as.factor(cat1f)
+       , cat2f = as.factor(cat2f)
+     )
+   
      if (method == "mclust") {
-       
-       which_cols <- grep("V", names(y))[-1]
-       
-       y %<>% mutate(
-         V2    = rowSums(.[which_cols], na.rm = T)
-         , cat1f = as.factor(cat1f)
-         , ww    = ifelse(V1 > V2, V1, V2)
-       )
+      
+       y %<>% mutate(ww = ifelse(V1 > V2_adj, V1, V2_adj))
        
        no_variance <- glm(
            formula = gam_formula %>% as.formula()
@@ -297,6 +297,78 @@ names(stan_fit) <- paste(
 , sep = " -- ")
 
 return(stan_fit)
+  
+}
+
+## Above model fitting function simplified for the one model being fit for the pub
+fit_stan_models_for_pub <- function(simulated_data, param_sets, model_names) {
+  
+  simulated_data <- simulated_data[[1]]
+  model_name     <- model_names[[1]]
+  param_set      <- param_sets %>% filter(
+    param_set == unique(simulated_data$param_set)
+    , sim_num   == unique(simulated_data$sim_num)
+  )
+
+  if (unique(simulated_data$log_mfi) == "mfi") {
+    stan_fit <- model_name$compiled_model[[1]]$sample(
+      data    = list(
+          N           = param_set$n_samps
+        , N_cat1r     = param_set$cat1r_count
+        , y           = simulated_data$mfi
+        , cat1f       = simulated_data$cat1f
+        , cat2f       = simulated_data$cat2f
+        , con1f       = simulated_data$con1f
+        , con2f       = simulated_data$con2f
+        
+        , mu_base_prior     = 10000
+        , mu_diff_prior     = 10000
+        , sigma_base_prior  = 1000
+        , sigma_diff_prior  = 1000
+        , theta_conf_prior  = 500
+      )
+      , chains  = 4
+      , parallel_chains = 1
+      , seed    = 483892929
+      , refresh = 2000
+    )
+  } else {
+    stan_fit <- model_name$compiled_model[[1]]$sample(
+      data    = list(
+          N           = param_set$n_samps
+        , N_cat1r     = param_set$cat1r_count
+        , y           = simulated_data$mfi
+        , cat1f       = simulated_data$cat1f
+        , cat2f       = simulated_data$cat2f
+        , con1f       = simulated_data$con1f
+        , con2f       = simulated_data$con2f
+        
+        , mu_base_prior     = 3
+        , mu_diff_prior     = 3
+        , sigma_base_prior  = 3
+        , sigma_diff_prior  = 3
+        , theta_conf_prior  = 3
+      )
+      , chains  = 4
+      , parallel_chains = 1
+      , seed    = 483892929
+      , refresh = 2000
+    )
+  }
+  
+  stanfit <- rstan::read_stan_csv(stan_fit$output_files())
+  samps   <- rstan::extract(stanfit)
+  samps   <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec|theta_cat1r_eps", names(samps))]
+  
+  stan_fit        <- list(samps)
+  names(stan_fit) <- paste(
+    model_name$model
+    , unique(simulated_data$param_set)
+    , unique(simulated_data$sim_num)
+    , unique(simulated_data$log_mfi)
+    , sep = " -- ")
+  
+  return(stan_fit)
   
 }
 

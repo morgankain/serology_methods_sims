@@ -36,7 +36,8 @@ setup_targets <- tar_plan(
   , tar_target(models_to_fit,
       establish_models(       
         model_set = c(
-         "cluster_regression_base_1.stan"
+         "publication_model_2.stan"
+     #   "cluster_regression_base_1.stan"
      #   "cluster_regression_with_beta_1.stan"
      #   "cluster_regression_with_beta_theta_ln_1.stan"
      #   "cluster_regression_with_beta_theta_ln_2.stan"
@@ -59,8 +60,8 @@ setup_targets <- tar_plan(
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 5#20#100
-      , n_sims_per_set   = 4#20
+      , n_param_sets     = 20#20#100
+      , n_sims_per_set   = 1#4#20
       , n_samps          = 1000
       
         ## Sample composition
@@ -197,7 +198,7 @@ fitting_targets <- tar_plan(
   
     ## Fir the stan models and return all the raw models in a list
   , tar_target(stan_fits.l, 
-      fit_stan_models(
+     fit_stan_models_for_pub(
         simulated_data = simulated_data.l
       , param_sets     = sim.params
       , model_names    = stan_models.l
@@ -246,7 +247,7 @@ cleanup_targets <- tar_plan(
   
    ## Summarize stan fits and combine with parameter values
  , tar_target(stan.summary,
-      summarize_stan_fits(
+      summarize_stan_fits_for_pub(
         model_fits     = stan.fits
       , param_sets     = sim.params
       , simulated_data = sim.data
@@ -296,17 +297,15 @@ collate_targets <- tar_plan(
       , stan.sum           = stan.summary$coef
       , coef_name_vec      = c(
           "beta_base"
-        , "beta_cat1f"
         , "beta_cat1f_delta"
+        , "beta_cat2f_delta"
         , "beta_con1f_delta"
-        , "theta_cat2f_mu"
-        , "theta_cat1r_sd"
+        , "theta_con2f_delta"
       )
      )
    )
   
 )
-
 
 ## plot output
 plotting_targets <- tar_plan(
@@ -318,12 +317,11 @@ plotting_targets <- tar_plan(
     , param_sets    = sim.params
     , coverage      = all.out$coverage
     , coef_name_vec = c(
-          "beta_base"
-        , "beta_cat1f"
-        , "beta_cat1f_delta"
-        , "beta_con1f_delta"
-        , "theta_cat2f_mu"
-        , "theta_cat1r_sd"
+        "beta_base"
+      , "beta_cat1f_delta"
+      , "beta_cat2f_delta"
+      , "beta_con1f_delta"
+      , "theta_con2f_delta"
       )  
     )
   )
