@@ -11,8 +11,8 @@ for (f in list.files(here::here("R"), full.names = TRUE)) source (f)
 # Setup  ------------------------------------------------------------
 
 ## Setup for future package for parallelization. This is the max allowable number of workers
-nworker <- 5
-nthread <- 5
+nworker <- 6
+nthread <- 6
 future::plan(list(tweak(future.callr::callr, workers = nworker), tweak(future.callr::callr, workers = nthread)))
 future::plan(future.callr::callr, workers = nworker)
 
@@ -60,9 +60,9 @@ setup_targets <- tar_plan(
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 20#20#100
+      , n_param_sets     = 500#20#100
       , n_sims_per_set   = 1#4#20
-      , n_samps          = 1000
+      , n_samps          = c(100, 2000)
       
         ## Sample composition
          ## catx as a generic stand-in for some categorical difference in the sample
