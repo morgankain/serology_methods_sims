@@ -5,29 +5,24 @@ group_via_3sd           <- function(simulated_data, param_sets, groupings) {
  
  three_sd.g <- lapply(simulated_data.l, FUN = function(x) {
 
-   ## Only somewhat realistic here, but because we may not have a negative control, lets create one
-    ## by selecting 20 negative individuals as a realistically obtainable and possibly sensible
-     ## negative control set 
+   ## Lets first assume we use a robust mean and sd estimator to downweight extreme values
    neg_set_a <- x %>% 
-     filter(group == 1) %>% 
-     slice(sample(seq(n()), min(20, n()))) %>% 
      summarize(
-       mean_neg = mean(mfi)
-       , sd_neg   = sd(mfi)
+       mean_neg = dplR::tbrm(mfi)
+     , sd_neg   = jointseg::estimateSd(mfi)
      ) %>%
      dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
    
    ## As an alternative, lets try and model a true control (i.e., blanks or some lab colony or something like that),
     ## which we expect to have lower MFI than many wild animals. So instead, here I sort the MFI values and then sample
-     ## 20 from the lowest 10% of MFI values
+     ## 20 from the lowest 50% of MFI values
    ## NOTE: this will obviously have a huge impact on the standard deviation, which could result in a quite different
     ## cutoff and thus quite different designations for what is a seropositive and seronegative individual
    ## BUT: to a large degree this is the point of the whole paper. Either of these seem defensible enough and have
     ## large implications
    neg_set_b <- x %>% 
-     filter(group == 1) %>% 
      arrange(mfi) %>%
-     slice(1:(max(c(round((1/3)*n(), 1), 20)))) %>% 
+     slice(1:(max(c(round((1/2)*n(), 1), 20)))) %>% 
      slice(sample(seq(n()), min(20, n()))) %>%
      summarize(
        mean_neg = mean(mfi)
@@ -36,17 +31,17 @@ group_via_3sd           <- function(simulated_data, param_sets, groupings) {
      dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
    
    x %>% mutate(
-     assigned_group_sample_mfi = ifelse(
+     assigned_group_robust = ifelse(
        mfi > neg_set_a["mean_neg"] + 3 * neg_set_a["sd_neg"]
        , 2
        , 1
      )
-     , assigned_group_control_mfi = ifelse(
+     , assigned_group_control = ifelse(
        mfi > neg_set_b["mean_neg"] + 3 * neg_set_b["sd_neg"]
        , 2
        , 1
      )
-   ) %>% pivot_longer(., c(assigned_group_sample_mfi, assigned_group_control_mfi)
+   ) %>% pivot_longer(., c(assigned_group_robust, assigned_group_control)
                      , names_to = "sd_method", values_to = "assigned_group")
   
  }
@@ -59,6 +54,78 @@ group_via_3sd           <- function(simulated_data, param_sets, groupings) {
    , assigned_group  = assigned_group - 1
   ) %>% 
    mutate(model = "3sd", .before = 1)
+  
+}
+
+## Explore grouping by 3sd across alternative strategies for determining sd
+group_via_3sd_alt       <- function(simulated_data, param_sets, groupings) {
+  
+  perc_sd <- c(seq(0, 1, by = 0.05), 2)
+  
+  simulated_data.l <- simulated_data %>% split_tibble(., groupings)
+  
+  three_sd.g <- lapply(simulated_data.l, FUN = function(x) {
+    
+   for (z in seq_along(perc_sd)) {
+    
+    ## As an alternative, lets try and model a true control (i.e., blanks or some lab colony or something like that),
+    ## which we expect to have lower MFI than many wild animals. So instead, here I sort the MFI values and then sample
+    ## 20 from the lowest 10% of MFI values
+    ## NOTE: this will obviously have a huge impact on the standard deviation, which could result in a quite different
+    ## cutoff and thus quite different designations for what is a seropositive and seronegative individual
+    ## BUT: to a large degree this is the point of the whole paper. Either of these seem defensible enough and have
+    ## large implications
+     
+     if (perc_sd[z] <= 1) {
+    neg_set <- x %>% 
+      arrange(mfi) %>%
+      slice(1:(max(c(round(perc_sd[z]*n(), 1), 20)))) %>% 
+      slice(sample(seq(n()), min(20, n()))) %>%
+      summarize(
+          mean_neg = mean(mfi)
+        , sd_neg   = sd(mfi)
+      ) %>%
+      dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
+     } else {
+    neg_set <- x %>%
+      summarize(
+          mean_neg = dplR::tbrm(mfi)
+        , sd_neg   = jointseg::estimateSd(mfi)
+      ) %>%
+      dplyr::select(mean_neg, sd_neg) %>% c() %>% unlist()
+     }
+    
+    x.t <- x %>% mutate(
+      assigned_group_sample_mfi = ifelse(
+        mfi > neg_set["mean_neg"] + 3 * neg_set["sd_neg"]
+        , 2
+        , 1
+      )
+    ) %>% pivot_longer(., assigned_group_sample_mfi
+                       , names_to = "sd_method"
+                       , values_to = "assigned_group") %>%
+      mutate(perc_sd = perc_sd[z])
+    
+    if (z == 1) {
+      x.f <- x.t
+    } else {
+      x.f <- rbind(x.f, x.t)
+    }
+    
+   }
+    
+    x.f
+    
+  }
+  ) %>% do.call("rbind", .)
+  
+  three_sd.g %>% mutate(
+    group  = group - 1
+    , V1     = ifelse(assigned_group == 1, 1, 0)
+    , V2     = 1 - V1
+    , assigned_group  = assigned_group - 1
+  ) %>% 
+    mutate(model = "3sd", .before = 1)
   
 }
 
@@ -301,68 +368,79 @@ return(stan_fit)
 }
 
 ## Above model fitting function simplified for the one model being fit for the pub
-fit_stan_models_for_pub <- function(simulated_data, param_sets, model_names) {
+fit_stan_models_for_pub <- function(simulated_data, param_sets, compiled_models, model_names) {
   
   simulated_data <- simulated_data[[1]]
-  model_name     <- model_names[[1]]
+  model_name     <- model_names[[1]] %>% pull(model_base_names)
   param_set      <- param_sets %>% filter(
     param_set == unique(simulated_data$param_set)
-    , sim_num   == unique(simulated_data$sim_num)
+  , sim_num   == unique(simulated_data$sim_num)
   )
-
-  if (unique(simulated_data$log_mfi) == "mfi") {
-    stan_fit <- model_name$compiled_model[[1]]$sample(
-      data    = list(
-          N           = param_set$n_samps
-        , N_cat1r     = param_set$cat1r_count
-        , y           = simulated_data$mfi
-        , cat1f       = simulated_data$cat1f
-        , cat2f       = simulated_data$cat2f
-        , con1f       = simulated_data$con1f
-        , con2f       = simulated_data$con2f
-        
-        , mu_base_prior     = 10000
-        , mu_diff_prior     = 10000
-        , sigma_base_prior  = 1000
-        , sigma_diff_prior  = 1000
-        , theta_conf_prior  = 500
-      )
-      , chains  = 4
-      , parallel_chains = 1
-      , seed    = 483892929
-      , refresh = 2000
-    )
-  } else {
-    stan_fit <- model_name$compiled_model[[1]]$sample(
-      data    = list(
-          N           = param_set$n_samps
-        , N_cat1r     = param_set$cat1r_count
-        , y           = simulated_data$mfi
-        , cat1f       = simulated_data$cat1f
-        , cat2f       = simulated_data$cat2f
-        , con1f       = simulated_data$con1f
-        , con2f       = simulated_data$con2f
-        
-        , mu_base_prior     = 3
-        , mu_diff_prior     = 3
-        , sigma_base_prior  = 3
-        , sigma_diff_prior  = 3
-        , theta_conf_prior  = 3
-      )
-      , chains  = 4
-      , parallel_chains = 1
-      , seed    = 483892929
-      , refresh = 2000
-    )
+  
+  if (model_name == "publication_model_2.stan") {
+    if (unique(simulated_data$log_mfi) == "mfi") {
+      model_name <- "publication_model_lognormal_2.stan"
+    } else if (unique(simulated_data$log_mfi) == "log_mfi") {
+      model_name <- "publication_model_normal_2.stan"
+    } else {
+      stop("Unknown model name / mfi / log mfi combo")
+    }
   }
   
+  this_model <- compiled_models %>% filter(model == model_name) %>% pull(compiled_model)
+  
+  prior_dat <- data.frame(
+      max_mfi           = 30000 
+    , mu_base_prior     = 10000
+    , mu_diff_prior     = 10000
+    , sigma_base_prior  = 1000 
+    , sigma_diff_prior  = 1000
+  ) %>% t() %>% 
+    as.data.frame() %>%
+    rename(mfi = V1) %>%
+    mutate(param = rownames(.), .before = 1) %>%
+    mutate(log_mfi = log(mfi))
+  
+  if (unique(simulated_data$log_mfi) == "log_mfi") {
+    prior_dat %<>% dplyr::select(param, log_mfi) %>% rename(prior = log_mfi)
+  } else if (unique(simulated_data$log_mfi) == "mfi") {
+    prior_dat %<>% dplyr::select(param, mfi) %>% rename(prior = mfi)
+  } else {
+    stop("data transform not supported")
+  }
+  
+  stan_fit <- this_model[[1]]$sample(
+    data    = list(
+        N           = length(simulated_data$mfi)
+      , N_cat1r     = param_set$cat1r_count
+      , y           = simulated_data$mfi
+      , cat1f       = simulated_data$cat1f
+      , cat2f       = simulated_data$cat2f
+      , con1f       = simulated_data$con1f
+      , max_mfi     = prior_dat %>% filter(param == "max_mfi") %>% pull(prior)
+      
+      , mu_base_prior     = prior_dat %>% filter(param == "mu_base_prior") %>% pull(prior)
+      , mu_diff_prior     = prior_dat %>% filter(param == "mu_diff_prior") %>% pull(prior)
+      , sigma_base_prior  = prior_dat %>% filter(param == "sigma_base_prior") %>% pull(prior)
+      , sigma_diff_prior  = prior_dat %>% filter(param == "sigma_diff_prior") %>% pull(prior)
+    )
+    , chains  = 4
+    , parallel_chains = 1
+    , max_treedepth = 12
+    , iter_warmup = 2000
+    , iter_sampling = 1000
+    , adapt_delta = 0.96
+    , seed    = 483892929
+    , refresh = 2000
+  )
+
   stanfit <- rstan::read_stan_csv(stan_fit$output_files())
   samps   <- rstan::extract(stanfit)
   samps   <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec|theta_cat1r_eps", names(samps))]
   
   stan_fit        <- list(samps)
   names(stan_fit) <- paste(
-    model_name$model
+      model_name
     , unique(simulated_data$param_set)
     , unique(simulated_data$sim_num)
     , unique(simulated_data$log_mfi)

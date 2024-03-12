@@ -30,27 +30,37 @@ setup_targets <- tar_plan(
        ## : One categorical fixed and one categorical random effect affecting group identity
       tar_target(data_complexity, 2)
   
-    ## Establish what stan models to fit
-    ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
-     ## here with _X, data_complexity >= X
-  , tar_target(models_to_fit,
+  , tar_target(models_to_compile,
       establish_models(       
         model_set = c(
-         "publication_model_2.stan"
-     #   "cluster_regression_base_1.stan"
-     #   "cluster_regression_with_beta_1.stan"
-     #   "cluster_regression_with_beta_theta_ln_1.stan"
-     #   "cluster_regression_with_beta_theta_ln_2.stan"
+         "publication_model_normal_2.stan"
+       , "publication_model_tnormal_2.stan"
+       , "publication_model_lognormal_2.stan"
+       , "publication_model_tlognormal_2.stan"
+       , "publication_model_skewnormal_2.stan"
        )
      , complexity = data_complexity
      )
    )
+      
+    ## Establish what stan models to fit
+    ## NOTE: _X controls -the minimal- data complexity to fit this model. Make sure if a model is listed
+     ## here with _X, data_complexity >= X
+  , tar_target(models_to_fit.l,
+      establish_models(       
+        model_set = c(
+         "publication_model_2.stan"
+       , "publication_model_skewnormal_2.stan"
+       )
+     , complexity = data_complexity
+     ) %>% as.data.frame() %>% rename(model_base_names = 1) %>% split_tibble(., "model_base_names")
+   )
   
     ## Compile stan models and stick them into a tibble that becomes a list for future and purrr::pmap
-  , tar_target(stan_models.l,
+  , tar_target(stan_models,
       compile_stan_models(
-        model_set = models_to_fit
-      ) %>% split_tibble(., "index")
+        model_set = models_to_compile
+      ) 
    )
    
     ## Establish parameters for the simulations
@@ -60,8 +70,8 @@ setup_targets <- tar_plan(
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 500#20#100
-      , n_sims_per_set   = 1#4#20
+      , n_param_sets     = 150
+      , n_sims_per_set   = 1
       , n_samps          = c(100, 2000)
       
         ## Sample composition
@@ -70,19 +80,19 @@ setup_targets <- tar_plan(
       , cat2f_prop       = 0.5
       , cat1r_count      = 10
       , con1f_sd         = 2
-      , con2f_sd         = 2
+    # , con2f_sd         = 2
     
         ## Group identity covariates (all on logit scale)
-      , beta_base        = c(-4, 0)
+      , beta_base        = c(-5, 0)
       , beta_cat1f_delta = c(0.2, 2)
       , beta_cat2f_delta = c(0.2, 2)
       , beta_con1f_delta = c(0.1, 1)
       
-      , mu_neg            = c(-5, -1)
-      , sd_neg            = c(0.2, 1) 
-      , mu_pos_delta      = c(0.5, 4)
-      , sd_pos_delta      = c(0, 2)
-      , theta_con2f_delta = c(0, 0.5)
+      , mu_neg            = c(-7, -3)
+      , sd_neg            = c(0.2, 1.5) 
+      , mu_pos_delta      = c(0.1, 5)
+      , sd_pos_delta      = c(1, 2)
+    #  , theta_con2f_delta = c(0, 0.5)
     #  , theta_con1f_delta = c(0.1, 1)
     #  , theta_cat2f_mu   = 0 
     #  , theta_cat1r_sd   = 0.5 
@@ -114,9 +124,10 @@ simulation_targets <- tar_plan(
     })
   
     ## Skew of raw data
-  , tar_target(data.skew,
-      calc_skew(
-        sim.data = sim.data
+  , tar_target(sim.data.summaries,
+      calc_sim_summaries(
+        simulated_data = sim.data
+      , param_sets     = sim.params
       )
     )
   
@@ -199,11 +210,12 @@ fitting_targets <- tar_plan(
     ## Fir the stan models and return all the raw models in a list
   , tar_target(stan_fits.l, 
      fit_stan_models_for_pub(
-        simulated_data = simulated_data.l
-      , param_sets     = sim.params
-      , model_names    = stan_models.l
+        simulated_data  = simulated_data.l
+      , param_sets      = sim.params
+      , compiled_models = stan_models
+      , model_names     = models_to_fit.l
       )
-    , pattern   = cross(simulated_data.l, stan_models.l)
+    , pattern   = cross(simulated_data.l, models_to_fit.l)
     , iteration = "list"
    )
   

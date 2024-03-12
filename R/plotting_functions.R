@@ -1,7 +1,8 @@
 ## Explore fits for the regression coefficients 
 plot_summary                   <- function(coef_ests, param_sets, coverage, coef_name_vec) {
 
-  stan_all.gg <- coef_ests %>% filter(!grepl("3sd|mclust", model)) %>% {
+  stan_all.gg <- coef_ests %>% 
+    filter(!grepl("3sd|mclust", model)) %>% {
     ggplot(., aes(mid, name)) + 
       geom_errorbarh(aes(xmin = lwr_n, xmax = upr_n), height = 0, linewidth = 1) +
       geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2, linewidth = 0.3) +
@@ -12,7 +13,8 @@ plot_summary                   <- function(coef_ests, param_sets, coverage, coef
       facet_wrap(~model)
   }
   
-  all_out.gg <- coef_ests %>% filter(name %in% coef_name_vec) %>% {
+  all_out.gg <- coef_ests %>% 
+    filter(name %in% coef_name_vec) %>% {
     ggplot(., aes(mid, model)) + 
       geom_errorbarh(aes(xmin = lwr_n, xmax = upr_n), height = 0, linewidth = 1) +
       geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.2, linewidth = 0.3) +
@@ -194,10 +196,16 @@ if (n_distinct(pop_seropositivity$sim_num) > num_sn) {
 }
 
 ## Plot individual-level group assignment probabilities
-plot_individual_group_prob     <- function(three_sd.g, mclust.g, stan.g, num_ps = 3, num_sn = 5) {
+plot_individual_group_prob     <- function(three_sd.g, mclust.g, stan.g
+                                           , num_ps = 3, num_sn = 5
+                                           , which_fits) {
   
 if (n_distinct(three_sd.g$param_set) > num_ps) {
-  rand_ps    <- sample(seq(n_distinct(three_sd.g$param_set)), num_ps)
+  if (!is.null(which_fits)) {
+    rand_ps <- which_fits
+  } else {
+    rand_ps    <- sample(seq(n_distinct(three_sd.g$param_set)), num_ps)
+  }
   three_sd.g %<>% filter(param_set %in% rand_ps)
   mclust.g   %<>% filter(param_set %in% rand_ps)
   stan.g     %<>% filter(param_set %in% rand_ps)

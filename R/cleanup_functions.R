@@ -20,7 +20,8 @@ regression.pred <- purrr::pmap(list(fitted_regressions, param_sets.l), .f = func
   regression_sims.pred <- purrr::pmap(list(x, regression_fits), .f = function(v, w) {
     
     true_vals <- w %>%
-      dplyr::select(param_set, sim_num, beta_base, beta_cat1f_delta, beta_con1f_delta) %>% 
+      dplyr::select(param_set, sim_num, beta_base
+                    , beta_cat1f_delta, beta_cat2f_delta, beta_con1f_delta) %>% 
       pivot_longer(-c(param_set, sim_num), values_to = "true")
     
     for (vv in 1:length(v)) {
@@ -377,14 +378,12 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
       , beta_cat1f_delta  = beta_cat1f_delta
       , beta_cat2f_delta  = beta_cat2f_delta
       , beta_con1f_delta  = beta_con1f_delta
-      , theta_con2f_delta = theta_con2f_delta
     ))
     
       true_vals <- y %>% 
         dplyr::select(
             param_set, sim_num, mu_neg, mu_pos, mu_pos_delta, sd_neg, sd_pos
           , beta_base, beta_cat1f_delta, beta_cat2f_delta, beta_con1f_delta
-          , theta_con2f_delta
         ) %>% 
         pivot_longer(-c(param_set, sim_num), values_to = "true")
       
@@ -486,7 +485,9 @@ calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g, param_sets
   three_sd.g %<>%
     dplyr::select(-assigned_group) %>%
     mutate(
-        false_pos = ifelse(group == 0 & V2 == 1, 1, 0)
+        true_pos  = ifelse(group == 0 & V2 == 0, 1, 0)
+      , true_neg  = ifelse(group == 1 & V2 == 1, 1, 0)
+      , false_pos = ifelse(group == 0 & V2 == 1, 1, 0)
       , false_neg = ifelse(group == 1 & V1 == 1, 1, 0)
     ) %>%
     group_by(model, param_set, sim_num, sd_method, log_mfi, group) %>%
@@ -494,14 +495,17 @@ calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g, param_sets
         prob        = mean(V2)
       , false_pos_p = length(which(false_pos == 1)) / n() 
       , false_neg_p = length(which(false_neg == 1)) / n()
+      , true_pos_p  = length(which(true_pos == 1)) / n()
+      , true_neg_p  = length(which(true_neg == 1)) / n()
     ) %>% mutate(
-      misclass_error_p = ifelse(group == 0, false_pos_p, false_neg_p)
-    ) %>% dplyr::select(-c(false_pos_p, false_neg_p)) %>% mutate(
+        misclass_error_p = false_pos_p + false_neg_p
+      , correct_class_p  = 1 - misclass_error_p
+    ) %>% mutate(
       quantile = "mid", .before = prob
     ) %>% left_join(., param_sets %>% dplyr::select(
         param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
       , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
-    ))
+    )) %>% rename(method = sd_method)
   
   mclust.g %<>%
     dplyr::select(-assigned_group) %>%
@@ -512,6 +516,13 @@ calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g, param_sets
     summarize(
         prob             = mean(V2_adj)
       , misclass_error_p = mean(misclass_error, na.rm = T)
+      , correct_class_p  = 1 - misclass_error_p
+    ) %>% mutate(
+        false_pos_p = NA
+      , false_neg_p = NA
+      , true_pos_p  = NA
+      , true_neg_p  = NA
+      , .before = "misclass_error_p"
     ) %>% mutate(
       quantile = "mid", .before = prob
     ) %>% left_join(., param_sets %>% dplyr::select(
@@ -524,14 +535,25 @@ calculate_group_assignments <- function(three_sd.g, mclust.g, stan.g, param_sets
     dplyr::select(-c(samp, cat1f, cat2f, mfi)) %>%
     pivot_longer(-c(model, param_set, sim_num, log_mfi, group, titer)
                  , names_to = "quantile") %>%
-    group_by(model, param_set, sim_num, group, quantile) %>%
+    group_by(model, param_set, sim_num, log_mfi, group, quantile) %>%
     summarize(
       prob = mean(value)
-    ) %>% mutate(misclass_error_p = ifelse(group == 0, prob, 1 - prob)) %>%
+    ) %>% mutate(
+       misclass_error_p = ifelse(group == 0, prob, 1 - prob)
+     , correct_class_p  = 1 - misclass_error_p
+    ) %>% mutate(
+        false_pos_p = NA
+      , false_neg_p = NA
+      , true_pos_p  = NA
+      , true_neg_p  = NA
+      , .before = "misclass_error_p"
+    ) %>%
     left_join(., param_sets %>% dplyr::select(
         param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
       , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
-    ))
+    )) %>% mutate(
+      method = "Bayesian LCR", .after = sim_num
+    )
   
   return(
     rbind(

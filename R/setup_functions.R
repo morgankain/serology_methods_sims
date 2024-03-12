@@ -84,7 +84,7 @@ establish_parameters_for_pub <- function(n_param_sets, complexity, ...) {
       , "cat1f_prop", "con1f_sd"
       , "beta_base", "beta_cat1f_delta", "beta_con1f_delta"
       , "mu_neg", "sd_neg", "mu_pos_delta", "sd_pos_delta"
-      , "theta_con2f_delta"
+    #  , "theta_con2f_delta"
     )
 
   model_input_params <- list(...) 
@@ -120,8 +120,9 @@ establish_parameters_for_pub <- function(n_param_sets, complexity, ...) {
   
   model_params %<>% 
     dplyr::mutate(
-      mu_pos = mu_neg + mu_pos_delta
-      , sd_pos = sd_neg * sd_pos_delta) %>% 
+        mu_pos = mu_neg + mu_pos_delta
+      , sd_pos = sd_neg * sd_pos_delta
+      ) %>% 
     dplyr::mutate(param_set = seq(n()), .before = 1) %>%
     group_by(param_set)
   
