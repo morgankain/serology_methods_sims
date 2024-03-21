@@ -206,6 +206,100 @@ mclust.g.c %>%
   
 }
 
+## Determine groupings with mclust -- adjusting to add in the additional collapsed version of the unconstrained
+group_via_mculst2       <- function(simulated_data, groupings) {
+  
+  simulated_data.l <- simulated_data %>% split_tibble(., groupings)
+  
+  mclust.g <- lapply(simulated_data.l, FUN = function(x) {
+    
+    clust.fit_constrained   <- Mclust(x$mfi, G = 2, modelNames = "V", verbose = FALSE)
+    clust.fit_unconstrained <- Mclust(x$mfi, modelNames = "V", verbose = FALSE) 
+    
+    num_groups_unconstrained <- clust.fit_unconstrained$G
+    dif_groups               <- clust.fit_unconstrained$G - clust.fit_constrained$G
+    
+    unconstrained_z   <- clust.fit_unconstrained$z
+    constrained_z     <- clust.fit_constrained$z
+    
+    unconstrained_class   <- clust.fit_unconstrained$classification
+    constrained_class     <- clust.fit_constrained$classification
+    
+    if (dif_groups > 0) {
+      constrained_z     <- cbind(constrained_z, matrix(data = NA, nrow = nrow(constrained_z), ncol = dif_groups))
+    }
+    if (dif_groups < 0) {
+      unconstrained_z <- cbind(unconstrained_z, matrix(data = NA, nrow = nrow(unconstrained_z), ncol = abs(dif_groups)))
+    }
+    
+    constrained_x   <- x %>% mutate(method = "constrained_mclust") %>% 
+      cbind(., as.data.frame(constrained_z)) %>% 
+      mutate(assigned_group = constrained_class)
+    
+    unconstrained_x <- x %>% mutate(method = "unconstrained_mclust") %>% 
+      cbind(., as.data.frame(unconstrained_z)) %>% 
+      mutate(assigned_group = unconstrained_class)
+    
+    if (num_groups_unconstrained >= 2) {
+      clust.fit_unconstrained.r <- clust.fit_unconstrained %>% clustCombi()
+      unconstrained.r_z <- clust.fit_unconstrained.r$combiz[[2]]
+      unconstrained.r_class <- clust.fit_unconstrained.r$classification[[2]]
+      unconstrained.r_z <- cbind(unconstrained.r_z, matrix(data = NA, nrow = nrow(unconstrained.r_z), ncol = dif_groups))
+      
+      unconstrained.r_x <- x %>% mutate(method = "unconstrained_reduced_mclust") %>% 
+        cbind(., as.data.frame(unconstrained.r_z)) %>% 
+        mutate(assigned_group = unconstrained.r_class) 
+      
+      rbind(constrained_x, unconstrained_x, unconstrained.r_x)
+      
+    } else{
+      
+      rbind(constrained_x, unconstrained_x)
+      
+    }
+    
+  })
+  
+  max_v <- lapply(mclust.g, FUN = function(x) {
+    x %>% dplyr::select(contains("V")) %>% ncol()
+  }) %>% unlist() %>% max()
+  
+  mclust.g.c <- lapply(mclust.g, FUN = function(x) {
+    t_num       <- x %>% dplyr::select(contains("V")) %>% ncol()
+    if (t_num < max_v) {
+      needed_cols <- paste("V", seq((t_num + 1), (t_num + (max_v - t_num))), sep = "")
+      highest_v   <- paste("V", t_num, sep = "")
+      for (i in seq_along(needed_cols)){
+        x %<>% mutate(
+          !!needed_cols[i] := NA
+          , .after = highest_v
+        )
+        highest_v <- needed_cols[i]
+      } 
+    }
+    x
+  }) %>% do.call("rbind", .) 
+  
+  ## Want to retain all of the raw probabilities for all the unconstrained groups to make the point about
+  ## an unconstrained cluster model, but fundamentally the goal here is to compare non-exposure to exposure
+  ## (we could think about this as a coarse / hacky way of getting "no exposure" vs "varying levels of exposure")
+  ## so still want to collapse YES vs NO for the unconstrained cluster model for the purpose of comparing to the
+  ## rest of the methods. While this could conceivably be done in a number of ways, we don't want the permutations
+  ## to become --too-- large here, so here we simply compare the first to all other clusters
+  ## (but again, retaining the raw cluster probabilities to make a different point later)
+  
+  mclust.g.c %>% 
+    mutate(
+        V2_adj         = 1 - V1
+      , group          = group - 1
+      , assigned_group = assigned_group - 1
+      , assigned_group = ifelse(assigned_group > 0, 1, 0)
+    ) %>% mutate(
+      model = "mclust", .before = 1
+    )
+  
+}
+
 ## Second phase regression models
 fit_regression          <- function(groupings, gam_formula, complexity, groupings1, groupings2, method) {
 

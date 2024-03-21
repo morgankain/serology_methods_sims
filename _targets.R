@@ -179,7 +179,7 @@ fitting_targets <- tar_plan(
   
     ## stage one: run mclust
   , tar_target(mculst.groups,
-      group_via_mculst(
+      group_via_mculst2(
         simulated_data = sim.data
       , groupings      = c("param_set", "sim_num", "log_mfi")
       )
@@ -222,7 +222,7 @@ fitting_targets <- tar_plan(
     ## Sort these output stan models into a sensible list object to combine with parameters for cleaning
   , tar_target(stan.fits,
       sort_stan_fits(
-        stan_fits.l   = stan_fits.l
+        stan_fits.l   = stan_fits.l 
       )
     )
   
@@ -312,7 +312,6 @@ collate_targets <- tar_plan(
         , "beta_cat1f_delta"
         , "beta_cat2f_delta"
         , "beta_con1f_delta"
-        , "theta_con2f_delta"
       )
      )
    )
