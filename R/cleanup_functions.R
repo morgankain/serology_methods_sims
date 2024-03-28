@@ -355,12 +355,11 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
   
   for (i in 1:nrow(model_fits)) {
     
-    y <- param_sets %>% filter(
-        param_set == model_fits$param_set[i]
-      , sim_num   == model_fits$sim_num[i]
+    ## Fitting details
+    fit_details <- model_fits$fit_details[[1]] %>% mutate(
+        chain = seq(n())
+      , .before = 1
     )
-    
-    samps <- model_fits[i, ]$fitted_model[[1]][[1]]
     
     z <- simulated_data %>% filter(
         param_set == model_fits$param_set[i]
@@ -368,25 +367,35 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
       , log_mfi   == model_fits$log_mfi[i]
     )
     
+    y <- param_sets %>% filter(
+        param_set == model_fits$param_set[i]
+      , sim_num   == model_fits$sim_num[i]
+    )
+    
+    true_vals <- y %>% 
+      dplyr::select(
+          param_set, sim_num, mu_neg, mu_pos, mu_pos_delta, sd_neg, sd_pos
+        , beta_base, beta_cat1f_delta, beta_cat2f_delta, beta_con1f_delta
+      ) %>% 
+      pivot_longer(-c(param_set, sim_num), values_to = "true")
+    
+    
+    if (model_fits$fit_success[i] == 1) {
+      
+    samps <- model_fits[i, ]$fitted_model[[1]]
+    
     samps_out <- with(samps, data.frame(
-        mu_base      = mu_base
-      , mu_pos       = mu_base + mu_diff
-      , mu_pos_delta = mu_diff
-      , sigma_base   = sigma_base
+        mu_base      = mu[, 1]
+      , mu_pos       = mu[, 2]
+      , mu_pos_delta = mu[, 2] - mu[, 1]
+      , sigma_base   = sigma[, 1]
       , sigma_pos    = sigma[, 2]
       , beta_base    = beta_base
       , beta_cat1f_delta  = beta_cat1f_delta
       , beta_cat2f_delta  = beta_cat2f_delta
       , beta_con1f_delta  = beta_con1f_delta
     ))
-    
-      true_vals <- y %>% 
-        dplyr::select(
-            param_set, sim_num, mu_neg, mu_pos, mu_pos_delta, sd_neg, sd_pos
-          , beta_base, beta_cat1f_delta, beta_cat2f_delta, beta_con1f_delta
-        ) %>% 
-        pivot_longer(-c(param_set, sim_num), values_to = "true")
-      
+  
     samps_out %<>% 
       mutate(samp = seq(n()), .before = 1) %>%
       pivot_longer(-samp) %>% group_by(name) %>%
@@ -403,11 +412,17 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
           , to = c("mu_neg", "sd_neg", "sd_pos"))
       ) 
     
+    } else {
+      samps_out <- data.frame(name = true_vals$name, lwr = NA, lwr_n = NA, mid = NA, upr_n = NA, upr = NA)
+    }
+    
     out.clean.t <- left_join(true_vals, samps_out, by = "name") %>% 
       left_join(model_fits[i, ] %>% dplyr::select(model, param_set, sim_num, log_mfi) %>%
                   mutate(param_set = as.numeric(param_set), sim_num = as.numeric(sim_num))
                 , ., by = c("param_set", "sim_num")) %>%
       left_join(., y %>% dplyr::select(param_set, sim_num, n_samps), by = c("param_set", "sim_num"))
+    
+    if (model_fits$fit_success[i] == 1) {
     
     pred_pos <- samps$membership_p %>% 
       reshape2::melt() %>% 
@@ -422,15 +437,25 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
         , upr   = quantile(`1`, 0.975)
       )
     
+    } else {
+      pred_pos <- data.frame(samp = seq(out.clean.t$n_samps[1]), lwr = NA, lwr_n = NA, mid = NA, upr_n = NA, upr = NA)
+    }
+    
     z %<>% mutate(samp = seq(n()), .before = 1) %>% 
       left_join(., pred_pos, by = "samp") %>% 
       mutate(stan_model = model_fits[i, ]$model, .before = 1)
+    
+    if (model_fits$fit_success[i] == 1) {
     
     pop_seropos <- (samps$pop_sero / y$n_samps) %>% 
       quantile(c(0.025, 0.200, 0.500, 0.800, 0.975)) %>% 
       t() %>% as.data.frame()
     
     names(pop_seropos) <- c("lwr", "lwr_n", "mid", "upr_n", "upr")
+    
+    } else {
+      pop_seropos <- data.frame(lwr = NA, lwr_n = NA, mid = NA, upr_n = NA, upr = NA)
+    }
     
     pop_seropos %<>% 
       mutate(
@@ -440,15 +465,17 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
         , log_mfi    = model_fits[i, ]$log_mfi
         , true       = (z %>% mutate(group = group - 1, group = ifelse(group > 0, 1, 0)) %>% pull(group) %>% sum()) / y$n_samps
       )
-    
+  
     if (i == 1) {
       out.clean     <- out.clean.t
       z.f           <- z
       pop_seropos.f <- pop_seropos
+      fit_details.f <- fit_details
     } else {
       out.clean     <- rbind(out.clean, out.clean.t)
       z.f           <- rbind(z.f, z)
       pop_seropos.f <- rbind(pop_seropos.f, pop_seropos)
+      fit_details.f <- rbind(fit_details.f, fit_details)
     }
     
   }
@@ -460,8 +487,13 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
         , CI_wid = upr - lwr
         , m_diff = abs(mid - true)
       )
-      , group_pred   = z.f %>% mutate(group = group - 1)
-      , prop_seropos = pop_seropos.f
+    , group_pred   = z.f %>% mutate(group = group - 1)
+    , prop_seropos = pop_seropos.f %>% mutate(
+      cover = ifelse(true > lwr & true < upr, 1, 0)
+        , CI_wid = upr - lwr
+        , m_diff = abs(mid - true)
+      )
+    , fit_details  = fit_details.f
     )
   )
   
@@ -469,13 +501,20 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
 
 ## Further cleanup of stan fits (adding summaries and adding sim parameters)
 summarize_stan_summary  <- function(stan_summary, param_sets) {
+
+  coef         <- lapply(stan_summary, FUN = function(x) {x$coef}) %>% do.call("rbind", .)
+  group_pred   <- lapply(stan_summary, FUN = function(x) {x$group_pred}) %>% do.call("rbind", .)
+  prop_seropos <- lapply(stan_summary, FUN = function(x) {x$prop_seropos}) %>% do.call("rbind", .)
+  fit_details  <- lapply(stan_summary, FUN = function(x) {x$fit_details}) %>% do.call("rbind", .)
   
-lapply(stan_summary, FUN = function(x) {
-  x %>% left_join(., param_sets %>% dplyr::select(
-    param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
-  , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
-  ))
-})
+return(
+  list(
+    coef         = coef
+  , group_pred   = group_pred
+  , prop_seropos = prop_seropos
+  , fit_details  = fit_details
+  )
+)
   
 }
 

@@ -13,7 +13,7 @@ for (f in list.files(here::here("R"), full.names = TRUE)) source (f)
 ## Setup for future package for parallelization. This is the max allowable number of workers
 nworker <- 6
 nthread <- 6
-future::plan(list(tweak(future.callr::callr, workers = nworker), tweak(future.callr::callr, workers = nthread)))
+# future::plan(list(tweak(future.callr::callr, workers = nworker), tweak(future.callr::callr, workers = nthread)))
 future::plan(future.callr::callr, workers = nworker)
 
 # Groups of targets ------------------------------------------------------------
@@ -34,10 +34,9 @@ setup_targets <- tar_plan(
       establish_models(       
         model_set = c(
          "publication_model_normal_2.stan"
-       , "publication_model_tnormal_2.stan"
        , "publication_model_lognormal_2.stan"
-       , "publication_model_tlognormal_2.stan"
-       , "publication_model_skewnormal_2.stan"
+       , "publication_model_skew_normal_2.stan"
+       , "publication_model_skew_normal_wf_2.stan"
        )
      , complexity = data_complexity
      )
@@ -50,7 +49,7 @@ setup_targets <- tar_plan(
       establish_models(       
         model_set = c(
          "publication_model_2.stan"
-       , "publication_model_skewnormal_2.stan"
+       , "publication_model_skew_2.stan"
        )
      , complexity = data_complexity
      ) %>% as.data.frame() %>% rename(model_base_names = 1) %>% split_tibble(., "model_base_names")
@@ -70,7 +69,7 @@ setup_targets <- tar_plan(
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 150
+      , n_param_sets     = 10
       , n_sims_per_set   = 1
       , n_samps          = c(100, 2000)
       
@@ -178,17 +177,17 @@ fitting_targets <- tar_plan(
     ## -- Two stage via mclust and then regression
   
     ## stage one: run mclust
-  , tar_target(mculst.groups,
-      group_via_mculst2(
+  , tar_target(mclust.groups,
+      group_via_mclust2(
         simulated_data = sim.data
       , groupings      = c("param_set", "sim_num", "log_mfi")
       )
     )
 
     ## stage two: run regression
-  , tar_target(mculst.groups.regression, 
+  , tar_target(mclust.groups.regression, 
       fit_regression(
-        groupings    = mculst.groups
+        groupings    = mclust.groups
       , gam_formula  = {
         if (data_complexity == 1) {
           "assigned_group ~ cat1f"
@@ -206,25 +205,29 @@ fitting_targets <- tar_plan(
     )
   
     ## -- One stage stan model
+     ## NOTE: Stan pipeline here does not perfectly parallel other options in terms of fit then summarize because of memory
+     ## considerations (cant load all the stan models at once and then summarize), so instead, this function fits the model
+     ## and does the summary right away
+  , tar_target(needed_stan_fits,
+     establish_stan_combos(
+       simulated_data  = simulated_data.l
+     , models_to_fit   = models_to_fit.l
+     )
+  )
   
-    ## Fir the stan models and return all the raw models in a list
-  , tar_target(stan_fits.l, 
+  , tar_target(stan.summary.l, 
      fit_stan_models_for_pub(
         simulated_data  = simulated_data.l
       , param_sets      = sim.params
       , compiled_models = stan_models
       , model_names     = models_to_fit.l
+      , data_complexity = data_complexity
+      , max_time        = 60*20
       )
     , pattern   = cross(simulated_data.l, models_to_fit.l)
     , iteration = "list"
+    , error     = "null" 
    )
-  
-    ## Sort these output stan models into a sensible list object to combine with parameters for cleaning
-  , tar_target(stan.fits,
-      sort_stan_fits(
-        stan_fits.l   = stan_fits.l 
-      )
-    )
   
 )
 
@@ -245,9 +248,9 @@ cleanup_targets <- tar_plan(
    )
   
    ## Summarize regression fits for mclust
- , tar_target(mculst.groups.regression.summary,
+ , tar_target(mclust.groups.regression.summary,
      sort_regression(
-       fitted_regressions = mculst.groups.regression
+       fitted_regressions = mclust.groups.regression
      , param_sets         = sim.params
      , complexity         = data_complexity
      , groupings1         = c("param_set")
@@ -256,20 +259,11 @@ cleanup_targets <- tar_plan(
        model = paste("mclust -- ", model, sep = "")
      )
    )
-  
-   ## Summarize stan fits and combine with parameter values
- , tar_target(stan.summary,
-      summarize_stan_fits_for_pub(
-        model_fits     = stan.fits
-      , param_sets     = sim.params
-      , simulated_data = sim.data
-      , complexity     = data_complexity
-      )
-    )
  
- , tar_target(stan.summary.clean,
+   ## Combine all of the stan summaries
+ , tar_target(stan.summary,
       summarize_stan_summary(
-        stan_summary   = stan.summary
+        stan_summary   = stan.summary.l
       , param_sets     = sim.params
       )
     )
@@ -278,7 +272,7 @@ cleanup_targets <- tar_plan(
  , tar_target(group_assignment,
      calculate_group_assignments(
         three_sd.g     = three_sd.groups
-      , mclust.g       = mculst.groups
+      , mclust.g       = mclust.groups
       , stan.g         = stan.summary$group_pred
       , param_sets     = sim.params
      )
@@ -288,7 +282,7 @@ cleanup_targets <- tar_plan(
  , tar_target(pop_seropositivity,
      calculate_population_seropositivity(
         three_sd.g     = three_sd.groups
-      , mclust.g       = mculst.groups
+      , mclust.g       = mclust.groups
       , stan.g         = stan.summary$prop_seropos
       , param_sets     = sim.params
      )
@@ -305,7 +299,7 @@ collate_targets <- tar_plan(
         pop_seropositivity = pop_seropositivity
       , group_assignment   = group_assignment
       , three_sd.sum       = three_sd.groups.regression.summary
-      , mclust.sum         = mculst.groups.regression.summary
+      , mclust.sum         = mclust.groups.regression.summary
       , stan.sum           = stan.summary$coef
       , coef_name_vec      = c(
           "beta_base"
@@ -348,7 +342,7 @@ plotting_targets <- tar_plan(
   tar_target(ind_group_prob.plot,
     plot_individual_group_prob(
       three_sd.g     = three_sd.groups
-    , mclust.g       = mculst.groups
+    , mclust.g       = mclust.groups
     , stan.g         = stan.summary$group_pred
     )
   )

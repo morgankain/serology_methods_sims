@@ -130,7 +130,7 @@ group_via_3sd_alt       <- function(simulated_data, param_sets, groupings) {
 }
 
 ## Determine groupings with mclust
-group_via_mculst        <- function(simulated_data, groupings) {
+group_via_mclust        <- function(simulated_data, groupings) {
   
  simulated_data.l <- simulated_data %>% split_tibble(., groupings)
   
@@ -207,7 +207,7 @@ mclust.g.c %>%
 }
 
 ## Determine groupings with mclust -- adjusting to add in the additional collapsed version of the unconstrained
-group_via_mculst2       <- function(simulated_data, groupings) {
+group_via_mclust2       <- function(simulated_data, groupings) {
   
   simulated_data.l <- simulated_data %>% split_tibble(., groupings)
   
@@ -462,7 +462,7 @@ return(stan_fit)
 }
 
 ## Above model fitting function simplified for the one model being fit for the pub
-fit_stan_models_for_pub <- function(simulated_data, param_sets, compiled_models, model_names) {
+fit_stan_models_for_pub <- function(simulated_data, param_sets, compiled_models, model_names, data_complexity, max_time) {
   
   simulated_data <- simulated_data[[1]]
   model_name     <- model_names[[1]] %>% pull(model_base_names)
@@ -479,87 +479,169 @@ fit_stan_models_for_pub <- function(simulated_data, param_sets, compiled_models,
     } else {
       stop("Unknown model name / mfi / log mfi combo")
     }
+  } else if (model_name == "publication_model_skew_2.stan") {
+    if (unique(simulated_data$log_mfi) == "mfi") {
+      model_name <- "publication_model_skew_lognormal_2.stan"
+      stop("Model not run")
+    } else if (unique(simulated_data$log_mfi) == "log_mfi") {
+      model_name <- "publication_model_skew_normal_wf_2.stan"
+    } else {
+      stop("Unknown model name / mfi / log mfi combo")
+    }
+  } else {
+    stop("Unknown model name / mfi / log mfi combo")
   }
   
   this_model <- compiled_models %>% filter(model == model_name) %>% pull(compiled_model)
+
+  stan_priors <- build_stan_priors(
+    simulated_data = simulated_data
+  , skew_fit = ifelse(grepl("skew", model_name), T, F)
+  , fit_attempt = 1
+  )
   
-  prior_dat <- data.frame(
-      max_mfi           = 30000 
-    , mu_base_prior     = 10000
-    , mu_diff_prior     = 10000
-    , sigma_base_prior  = 1000 
-    , sigma_diff_prior  = 1000
-  ) %>% t() %>% 
-    as.data.frame() %>%
-    rename(mfi = V1) %>%
-    mutate(param = rownames(.), .before = 1) %>%
-    mutate(log_mfi = log(mfi))
+  stan_fit <- fit_a_stan_model(
+    stan_priors    = stan_priors
+  , simulated_data = simulated_data
+  , this_model     = this_model
+  , skew_fit       = ifelse(grepl("skew", model_name), T, F)
+  , param_set      = param_set
+  , max_time       = max_time
+  )
   
-  if (unique(simulated_data$log_mfi) == "log_mfi") {
-    prior_dat %<>% dplyr::select(param, log_mfi) %>% rename(prior = log_mfi)
-  } else if (unique(simulated_data$log_mfi) == "mfi") {
-    prior_dat %<>% dplyr::select(param, mfi) %>% rename(prior = mfi)
+  if (is(stan_fit, "try-error")) {
+    
+    stan_fit    <- list("Timeout")
+    fit_details <- data.frame(
+      divergent_transitions = NA
+    , time_to_fit           = max_time
+    , max_Rhat              = NA
+    )
+    
   } else {
-    stop("data transform not supported")
+    
+    stanfit     <- rstan::read_stan_csv(stan_fit$output_files())
+    samps       <- rstan::extract(stanfit)
+    stansummary <- summary(stanfit)
+    lwr_upr     <- quantile(samps$beta_base, c(0.025, 0.975))
+    
+    ## !!! Add a refit condition for non-coverage of CI to refit nudging
+     ## !!! BUT actually --sneakily-- just fit the nudging one from the start, but have the code as if we didnt...
+    
+    if (
+      (max(stansummary$summary[, 10], na.rm = T) > 2) |
+      ((param_set$beta_base < lwr_upr[1]) | (param_set$beta_base > lwr_upr[2]))
+      ) {
+      
+      stan_priors <- build_stan_priors(
+          simulated_data = simulated_data
+        , skew_fit = ifelse(grepl("skew", model_name), T, F)
+        , fit_attempt = 2
+      )
+      
+      stan_fit <- fit_a_stan_model(
+          stan_priors    = stan_priors
+        , simulated_data = simulated_data
+        , this_model     = this_model
+        , skew_fit       = ifelse(grepl("skew", model_name), T, F)
+        , param_set      = param_set
+        , max_time       = max_time
+      )
+      
+      if (is(stan_fit, "try-error")) {
+        stan_fit    <- list("Timeout")
+        fit_details <- data.frame(
+            divergent_transitions = NA
+          , time_to_fit           = max_time
+          , max_Rhat              = NA)
+      } else {
+        stanfit     <- rstan::read_stan_csv(stan_fit$output_files())
+        samps       <- rstan::extract(stanfit)
+        stansummary <- summary(stanfit) 
+      } 
+    } 
+    
+    samps     <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec|theta_cat1r_eps", names(samps))]
+    stan_fit  <- list(samps)
+    stanfit.s <- summary(stanfit)
+    
+    fit_details <- lapply(stanfit@sim$samples, FUN = function(x) {
+      data.frame(
+          divergent_transitions = attr(x, "sampler_params") %>% pull(divergent__) %>% sum()
+        , time_to_fit           = attr(x, "elapsed_time") %>% sum()
+      )
+    }) %>% do.call("rbind", .) 
+    
+    fit_details %<>% mutate(
+      max_Rhat   = stanfit.s$summary %>% as.data.frame() %>% pull(Rhat) %>% max(na.rm = T)
+    )
+    
   }
   
-  stan_fit <- this_model[[1]]$sample(
-    data    = list(
-        N           = length(simulated_data$mfi)
-      , N_cat1r     = param_set$cat1r_count
-      , y           = simulated_data$mfi
-      , cat1f       = simulated_data$cat1f
-      , cat2f       = simulated_data$cat2f
-      , con1f       = simulated_data$con1f
-      , max_mfi     = prior_dat %>% filter(param == "max_mfi") %>% pull(prior)
-      
-      , mu_base_prior     = prior_dat %>% filter(param == "mu_base_prior") %>% pull(prior)
-      , mu_diff_prior     = prior_dat %>% filter(param == "mu_diff_prior") %>% pull(prior)
-      , sigma_base_prior  = prior_dat %>% filter(param == "sigma_base_prior") %>% pull(prior)
-      , sigma_diff_prior  = prior_dat %>% filter(param == "sigma_diff_prior") %>% pull(prior)
-    )
-    , chains  = 4
-    , parallel_chains = 1
-    , max_treedepth = 12
-    , iter_warmup = 2000
-    , iter_sampling = 1000
-    , adapt_delta = 0.96
-    , seed    = 483892929
-    , refresh = 2000
-  )
-
-  stanfit <- rstan::read_stan_csv(stan_fit$output_files())
-  samps   <- rstan::extract(stanfit)
-  samps   <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec|theta_cat1r_eps", names(samps))]
-  
-  stan_fit        <- list(samps)
   names(stan_fit) <- paste(
+    model_name
+    , unique(simulated_data$param_set)
+    , unique(simulated_data$sim_num)
+    , unique(simulated_data$log_mfi)
+    , sep = " -- "
+  )
+  
+  fit_details %<>% mutate(
+      model_name = model_name
+    , param_set  = unique(simulated_data$param_set)
+    , sim_num    = unique(simulated_data$sim_num)
+    , log_mfi    = unique(simulated_data$log_mfi)
+  )
+  
+  fit_details <- list(fit_details)
+  
+  names(fit_details) <- paste(
       model_name
     , unique(simulated_data$param_set)
     , unique(simulated_data$sim_num)
     , unique(simulated_data$log_mfi)
-    , sep = " -- ")
+    , sep = " -- "
+  )
   
-  return(stan_fit)
+  stan_fit.combined <- list(
+      stan_samples = stan_fit
+    , stan_details = fit_details
+  )
+  
+  ## Some organization into a tibble. Sorta deprecated because this was mostly used when combining all fits, but with the changes this is sorta
+   ## unnecessary. Keeping for now because the next function expects this structure though. Possibly something to strip out moving forward
+  sorted_out <- sort_stan_fits(
+    stan_fits.l = stan_fit.combined
+  )
+  
+  cleaned_out <- summarize_stan_fits_for_pub(
+      model_fits     = sorted_out
+    , param_sets     = param_sets
+    , simulated_data = simulated_data
+    , complexity     = data_complexity
+  )
+  
+  return(cleaned_out)
   
 }
 
 ## ^^ Function to deal with what is returned from fit_stan_models_f to get into structure for
  ## how I built summarize_stan_fits.
 sort_stan_fits          <- function(stan_fits.l) {
-  ## Need a list of lists
-   ## outer list is of length n-models
-    ## each of these has length = n_param_sets
- model_names <- lapply(stan_fits.l, FUN = function(x) {
-    names(x)
-  }) %>% unlist()
- 
-fit_details <- lapply(model_names %>% as.list(), FUN = function(x) {
-   strsplit(x, " -- ") %>% unlist() %>% t() %>% as.data.frame()
-  }) %>% do.call("rbind", .) %>% 
-  rename(model = V1, param_set = V2, sim_num = V3, log_mfi = V4) %>% as_tibble()
 
-resorted_fits <- fit_details %>% mutate(fitted_model = stan_fits.l)
+  model_names <- names(stan_fits.l[[1]])
+ 
+  fit_details <- lapply(model_names %>% as.list(), FUN = function(x) {
+    strsplit(x, " -- ") %>% unlist() %>% t() %>% as.data.frame()
+  }) %>% do.call("rbind", .) %>% 
+    rename(model = V1, param_set = V2, sim_num = V3, log_mfi = V4) %>% as_tibble()
+
+  resorted_fits <- fit_details %>% 
+    mutate(
+        fitted_model = stan_fits.l[[1]]
+      , fit_details = stan_fits.l[[2]]
+      , fit_success = ifelse(nrow(stan_fits.l[[2]][[1]]) == 1, 0, 1)
+    )
  
 return(resorted_fits)
  
