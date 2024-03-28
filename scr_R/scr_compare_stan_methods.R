@@ -3,7 +3,17 @@ tar_load(sim.data)
 tar_load(sim.params)
 tar_load(stan_models.l)
 
-this_set   <- 311
+sim.data.summaries %>% filter(log_mfi == "log_mfi") %>% arrange(desc(prop_squish_2))
+
+this_set   <- 177
+
+sim.data %>% filter(param_set == this_set, log_mfi == "log_mfi", group == 2) %>%
+  pull(mfi) %>% skewness()
+
+sim.data %>% 
+  filter(param_set == this_set, log_mfi == "log_mfi") %>%
+  group_by(group) %>%
+  summarize(n())
 
 sim.data %>% 
   filter(param_set == this_set) %>% 
