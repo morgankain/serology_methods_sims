@@ -446,8 +446,12 @@ summarize_stan_fits_for_pub <- function(model_fits, param_sets, simulated_data, 
       mutate(stan_model = model_fits[i, ]$model, .before = 1)
     
     if (model_fits$fit_success[i] == 1) {
+      
+    pop_sero <- apply(samps$beta_vec, 1, FUN = function(x) {
+      rbinom(length(x), 1, x) %>% sum()
+    })
     
-    pop_seropos <- (samps$pop_sero / y$n_samps) %>% 
+    pop_seropos <- (pop_sero / y$n_samps) %>% 
       quantile(c(0.025, 0.200, 0.500, 0.800, 0.975)) %>% 
       t() %>% as.data.frame()
     

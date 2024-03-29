@@ -146,8 +146,9 @@ Overlap") +
       )
   }
 
-##### LCR method and log vs not log on pop seropositivity ----- 
+##### LCR method on pop seropositivity ----- 
 
+all.out$pop_seropositivity %>% 
 
 
 ##### Comparing all methods on pop seropositivity ----- 
@@ -204,12 +205,29 @@ all.out$coefficient_ests %>%
 
 ##### LCR method and log vs not log on coef estimates ----- 
 
+stan.summary$prop_seropos %>% 
+  left_join(., sim.data.summaries) %>%
+  mutate(m_diff = ifelse(mid < true, m_diff * -1, m_diff)) %>% 
+  mutate(cover = as.factor(cover)) %>% {
+    ggplot(., aes(mfi_skew_2, m_diff)) +
+      geom_point(aes(colour = stan_model, shape = cover)) +
+      facet_wrap(~log_mfi, scales = "free_x") +
+      geom_hline(yintercept = 0)
+  }
 
+stan.summary$prop_seropos %>% 
+  left_join(., sim.data.summaries) %>%
+  mutate(mfi_skew_2 = plyr::round_any(mfi_skew_2, 0.2)) %>%
+  group_by(mfi_skew_2, log_mfi, stan_model) %>%
+  summarize(cover = mean(cover)) %>% {
+    ggplot(., aes(mfi_skew_2, cover)) +
+      geom_point(aes(colour = stan_model), size = 3) +
+      facet_wrap(~log_mfi, scales = "free_x")
+  }
 
 ##### Comparing all methods on coefficient estimates ----- 
 
-
-
+source("main_approach_coverage.R")
 
 ############################################################
 ############################################################

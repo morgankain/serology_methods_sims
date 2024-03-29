@@ -561,7 +561,7 @@ fit_stan_models_for_pub <- function(simulated_data, param_sets, compiled_models,
       } 
     } 
     
-    samps     <- samps[!grepl("membership_l|ind_sero|log_beta|beta_vec|theta_cat1r_eps", names(samps))]
+    samps     <- samps[!grepl("membership_l|ind_sero|log_beta|theta_cat1r_eps", names(samps))]
     stan_fit  <- list(samps)
     stanfit.s <- summary(stanfit)
     

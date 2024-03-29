@@ -11,8 +11,8 @@ for (f in list.files(here::here("R"), full.names = TRUE)) source (f)
 # Setup  ------------------------------------------------------------
 
 ## Setup for future package for parallelization. This is the max allowable number of workers
-nworker <- 6
-nthread <- 6
+nworker <- 7
+nthread <- 7
 # future::plan(list(tweak(future.callr::callr, workers = nworker), tweak(future.callr::callr, workers = nthread)))
 future::plan(future.callr::callr, workers = nworker)
 
@@ -69,7 +69,7 @@ setup_targets <- tar_plan(
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 10
+      , n_param_sets     = 280
       , n_sims_per_set   = 1
       , n_samps          = c(100, 2000)
       
@@ -222,13 +222,13 @@ fitting_targets <- tar_plan(
       , compiled_models = stan_models
       , model_names     = models_to_fit.l
       , data_complexity = data_complexity
-      , max_time        = 60*20
+      , max_time        = 60*14
       )
     , pattern   = cross(simulated_data.l, models_to_fit.l)
     , iteration = "list"
     , error     = "null" 
    )
-  
+
 )
 
 ## Tidy up code returned by fitting targets
