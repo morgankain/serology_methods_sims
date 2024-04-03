@@ -186,7 +186,7 @@ calc_sim_summaries      <- function(simulated_data, param_sets) {
   trunc_sev2 <- simulated_data %>% 
     group_by(param_set, sim_num, group, log_mfi) %>%
     mutate(
-      mmode = modeest::mlv(mfi, method = "meanshif")
+        mmode = modeest::mlv(mfi, method = "meanshif")
       , abv_m = ifelse(mfi > mmode, 1, 0)
     )
   

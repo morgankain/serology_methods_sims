@@ -1,13 +1,18 @@
-##### 3sd method and log vs not log on pop seropositivity ----- 
+##### 
+## Figure 1: 3sd approaches, log and linear
+#####
 
 all.out$pop_seropositivity %>% 
   filter(model == "3sd") %>%
+  filter(quantile == "mid") %>%
   dplyr::select(log_mfi, param_set, method, true, prop_pos_diff) %>% 
   pivot_wider(names_from = log_mfi, values_from = prop_pos_diff) %>% 
   mutate(method = plyr::mapvalues(method, from = c(
     "assigned_group_control", "assigned_group_robust"
   ), to = c(
-    "Approximated Control", "Robust Mean and SD"
+    "Approximated
+Control", "Robust Mean
+and SD"
   ))) %>% {
     ggplot(., aes(mfi, log_mfi)) + 
       geom_point(aes(colour = method)) +
@@ -19,36 +24,45 @@ all.out$pop_seropositivity %>%
           mutate(method = plyr::mapvalues(method, from = c(
             "assigned_group_control", "assigned_group_robust"
           ), to = c(
-            "Approximated Control", "Robust Mean and SD"
+            "Approximated
+Control", "Robust Mean
+and SD"
           ))) %>%
-          filter(param_set %in% c(126, 190))
-        , aes(mfi, log_mfi, colour = method), size = 5, shape = c(0, 0, 2, 2)
+          filter(param_set %in% c(445, 412))
+        , aes(mfi, log_mfi, colour = method), size = 12, shape = c(15, 15, 17, 17)
+        , alpha = 0.3
       ) +
       geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
       geom_vline(xintercept = 0, linetype = "dotted") +
       geom_hline(yintercept = 0, linetype = "dotted") +
-      xlab("MFI") +
-      ylab("Log(MFI)") +
-      scale_colour_brewer(palette = "Dark2", name = "Method")
+      xlab("Estimated - True Seropositivity (MFI)") +
+      ylab("Estimated - True Seropositivity (Log MFI)") +
+      scale_colour_brewer(palette = "Dark2", name = "Method") +
+      theme(
+        legend.key.size = unit(0.8, "cm")
+      , legend.position = c(0.2, 0.85)) +
+      guides(color = guide_legend(override.aes = list(size = 3, alpha = 1)))
   }
 
-## 126, 190
+## 445, 412, 304, 345
 
 three_sd.groups %>% 
-  filter(param_set %in% c(126, 190)) %>% 
+  filter(param_set %in% c(445, 412)) %>% 
   mutate(param_set = as.factor(param_set)) %>%
   mutate(sd_method = plyr::mapvalues(sd_method, from = c(
     "assigned_group_control", "assigned_group_robust"
   ), to = c(
-    "Approximated Control", "Robust Mean and SD"
+    "Approximated
+Control", "Robust Mean
+and SD"
   ))) %>%
   mutate(group = plyr::mapvalues(group, from = c(0, 1), to = c("Negative", "Positive"))) %>%
   mutate(group = as.factor(group)) %>% {
     ggplot(., aes(mfi, assigned_group)) + 
       geom_jitter(
-        aes(colour = group, shape = param_set)  
-        , width = 0.2, height = 0.2) +
-      facet_grid(sd_method~log_mfi, scales = "free_x") +
+         aes(colour = group, shape = sd_method)  
+       , width = 0.2, height = 0.2) +
+      facet_grid(param_set~log_mfi, scales = "free_x") +
       ylab("Assigned Serostatus") +
       xlab("MFI") +
       scale_y_continuous(breaks = c(0, 1), labels = c("Negative", "Positive")) +
@@ -59,17 +73,20 @@ Serostatus"
       ) +
       scale_shape_manual(
         values = c(0, 2)
-      , labels = c("", "")
-      , name = "Parameter
-Set"
+      , name = "Method"
       ) +
       theme(
         axis.text.y = element_text(size = 12)
-      , strip.text.x = element_blank())
+      , axis.text.x = element_text(size = 10)
+      , strip.text.y = element_blank()
+      , strip.text.x = element_blank()
+      , legend.key.size = unit(0.25, "cm")
+      , legend.position = c(0.85, 0.25)
+      , legend.text = element_text(size = 8))
   }
 
 three_sd.groups %>% 
-  filter(param_set %in% c(126, 190)) %>% 
+  filter(param_set %in% c(445, 412)) %>% 
   mutate(
       group = as.factor(group)
     , int = interaction(cat1f, group)
@@ -86,15 +103,361 @@ Serostatus"
         , name = "True
 Serostatus"
       ) +
-      facet_wrap(log_mfi~param_set, scales = "free", nrow = 3) +
+      facet_wrap(param_set~log_mfi, scales = "free", nrow = 3) +
       ylab("Density") +
       xlab("MFI") +
-      theme(strip.text.x = element_blank())
+      theme(
+        strip.text.x = element_blank()
+      , axis.text.y = element_text(size = 10)
+      , axis.text.x = element_text(size = 10)
+      , legend.key.size = unit(0.5, "cm")
+      , legend.position = c(0.85, 0.25)
+      , legend.text = element_text(size = 8)
+        )
+  }
+
+##### 
+## Figure 2 and Figure X: x-axis skew of distribution, y-axis bias in seropositivity estimates
+## log MFI, mclust, N-N, N-SN
+## log MFI, all mclust methods
+#####
+
+all.out$pop_seropositivity %>% 
+  filter(model %in% c(
+    "publication_model_normal_2.stan"
+  , "publication_model_skew_normal_wf_2.stan"
+  , "mclust"
+  )
+, method %in% c(
+  "Bayesian LCR"
+, "unconstrained_reduced_mclust"
+)) %>% mutate(mod.meth = interaction(model, method)) %>%
+  mutate(Approach = plyr::mapvalues(
+    mod.meth
+    , from = c(
+      "mclust.unconstrained_reduced_mclust"
+    , "publication_model_normal_2.stan.Bayesian LCR"
+    , "publication_model_skew_normal_wf_2.stan.Bayesian LCR"
+    )
+    , to = c(
+        "Mclust -- (Unconstrained -- BIC collapsed)"
+      , "Bayesian LCR -- normal-normal"
+      , "Bayesian LCR -- normal-skewnormal"
+    ))
+    ) %>% left_join(
+      .
+    , sim.data.summaries %>% dplyr::select(
+      param_set, log_mfi
+    , prop_overlap_quant, mfi_skew_2
+    , diff_mean
+    )) %>% filter(
+      quantile == "mid"
+    , log_mfi == "log_mfi"
+    ) %>% mutate(
+      mfi_skew_2 = plyr::round_any(mfi_skew_2, 0.05)
+    ) %>% group_by(
+      mfi_skew_2, Approach
+    ) %>% summarize(
+      prop_pos_diff = mean(prop_pos_diff, na.rm = T)
+    ) %>% {
+    ggplot(., aes(mfi_skew_2, prop_pos_diff)) +
+        geom_jitter(aes(colour = Approach), size = 3) +
+        scale_colour_brewer(palette = "Dark2") +
+        xlab("Seropositive Distribution Skew") +
+        ylab("Estimated - True Seropositivity") +
+        geom_hline(yintercept = 0, linetype = "dashed") +
+        geom_smooth(aes(colour = Approach), se = F) 
+    }
+
+all_coef_ests <- all.out$coefficient_ests %>% 
+  mutate(cover = ifelse(is.na(cover), 0, cover)) %>%
+  mutate(mod.meth = interaction(model, method)) %>%
+  mutate(
+    main_approach = plyr::mapvalues(
+      method
+      , from = unique(method)
+      , to   = c("Bayesian LCR", "Mclust", "Mclust", "Mclust", "3sd", "3sd")
+    )
+    , .before = model
+  ) %>%
+  mutate(
+    sub_approach = plyr::mapvalues(
+      mod.meth
+      , from = unique(mod.meth)
+      , to = c(
+          "normal-normal"
+        , "normal-skewnormal"
+        , "lognormal-lognormal"
+        , "mclust (2 group constrained) + unweighted regression"
+        , "mclust (2 group constrained) + probability weighted regression"
+        , "mclust (Unconstrained) + unweighted regression"
+        , "mclust (Unconstrained) + probability weighted regression"
+        , "mclust (Unconstrained reduced) + unweighted regression"
+        , "mclust (Unconstrained reduced) + probability weighted regression"
+        , "3sd (Approximated control)"
+        , "3sd (Robust Mean and SD)"
+      ))
+  )
+
+all_coef_ests %>% 
+  mutate(m_diff = ifelse(mid < true, m_diff * -1, m_diff)) %>% 
+  left_join(., sim.data.summaries %>% dplyr::select(
+    param_set, log_mfi
+    , prop_overlap_quant, mfi_skew_2
+    , diff_mean
+  )) %>%
+  filter(name %notin% c(
+      "mu_neg", "mu_pos", "mu_pos_delta"
+    , "sd_neg", "sd_pos", "theta_con2f_delta"
+  )) %>% 
+  filter(main_approach %in% c("Bayesian LCR"), log_mfi == "log_mfi") %>% 
+  mutate(
+    mfi_skew_2 = plyr::round_any(mfi_skew_2, 0.05)
+  ) %>% 
+  rename(Approach = sub_approach) %>%
+  mutate(Approach = plyr::mapvalues(Approach, from = c(
+    "normal-normal", "normal-skewnormal"
+  ), to = c(
+    "Bayesian LCR (normal-normal)", "Bayesian LCR (normal-skewnormal)"
+  ))) %>%
+  group_by(
+    mfi_skew_2, Approach, name
+  ) %>% summarize(
+    m_diff = mean(m_diff, na.rm = T)
+  ) %>% mutate(name = plyr::mapvalues(
+    name
+    , from = c("beta_base", "beta_cat1f_delta", "beta_cat2f_delta", "beta_con1f_delta")
+    , to   = c("Baseline (Intercept)", "Categorical Covariate 1"
+               , "Categorical Covariate 2", "Continuous Covariate 1")
+  ))%>% {
+    ggplot(., aes(mfi_skew_2, m_diff)) + 
+      geom_point(aes(colour = Approach)) +
+      scale_colour_brewer(palette = "Dark2") +
+      geom_smooth(aes(colour = Approach), se = F) +
+      facet_wrap(~name, scales = "free") +
+      geom_hline(yintercept = 0, linetype = "dashed") +
+      xlab("Seropositive Skew") +
+      ylab("Estimated - True Coefficient Estimate")
+  }
+
+all_coef_ests %>% 
+  mutate(m_diff = ifelse(mid < true, m_diff * -1, m_diff)) %>% 
+  left_join(., sim.data.summaries %>% dplyr::select(
+    param_set, log_mfi
+    , prop_overlap_quant, mfi_skew_2
+    , diff_mean
+  )) %>%
+  filter(name %notin% c(
+     "mu_neg", "mu_pos", "mu_pos_delta"
+    , "sd_neg", "sd_pos", "theta_con2f_delta"
+  )) %>% 
+  filter(main_approach %in% c("Bayesian LCR"), log_mfi == "log_mfi") %>% 
+  mutate(
+    mfi_skew_2 = plyr::round_any(mfi_skew_2, 0.2)
+  ) %>% 
+  rename(Approach = sub_approach) %>%
+  mutate(Approach = plyr::mapvalues(Approach, from = c(
+    "normal-normal", "normal-skewnormal"
+  ), to = c(
+    "Bayesian LCR (normal-normal)", "Bayesian LCR (normal-skewnormal)"
+  ))) %>%
+  group_by(
+    mfi_skew_2, Approach, name
+  ) %>% summarize(
+    cover = mean(cover, na.rm = T)
+  ) %>% mutate(name = plyr::mapvalues(
+    name
+    , from = c("beta_base", "beta_cat1f_delta", "beta_cat2f_delta", "beta_con1f_delta")
+    , to   = c("Baseline (Intercept)", "Categorical Covariate 1"
+              , "Categorical Covariate 2", "Continuous Covariate 1")
+  )) %>% {
+    ggplot(., aes(mfi_skew_2, cover)) + 
+      geom_point(aes(colour = Approach)) +
+      scale_colour_brewer(palette = "Dark2") +
+      geom_smooth(aes(colour = Approach), se = F) +
+      facet_wrap(~name, scales = "free") +
+      geom_hline(yintercept = 0, linetype = "dashed") +
+      xlab("Seropositive Skew") +
+      ylab("Estimated - True Coefficient Estimate")
+  }
+
+##### 
+## Figure X: Narrowing down to a small subset of parameter space for 3sd vs stan
+#####
+
+all_compare1 <- all.out$pop_seropositivity %>% 
+  mutate(mod.meth = interaction(model, method)) %>%
+  mutate(
+    main_approach = plyr::mapvalues(
+      method
+      , from = unique(method)
+      , to   = c("3sd", "3sd", "Mclust", "Mclust", "Mclust", "Bayesian LCR")
+    )
+    , .before = model
+  ) %>%
+  mutate(
+    sub_approach = plyr::mapvalues(
+      mod.meth
+      , from = unique(mod.meth)
+      , to = c(
+        "3sd (Approximated control)"
+        , "3sd (Robust Mean and SD)"
+        , "mclust (2 group constrained)"
+        , "mclust (Unconstrained; sum of 2-n)"
+        , "mclust (Unconstrained; BIC collapsed)"
+        , "normal-normal"
+        , "normal-skewnormal"
+        , "lognormal-lognormal"
+      ))
+  ) %>% 
+  mutate(m.s = interaction(main_approach, sub_approach, sep = " -- ")) %>%
+  mutate(m.s = factor(m.s, levels = unique(m.s))) %>% 
+  left_join(., sim.data.summaries %>% dplyr::select(
+      param_set, log_mfi
+    , prop_overlap_quant, mfi_skew_2
+    , diff_mean, prop_pos
+  ) %>% rename(prop_pos_true = prop_pos)) %>% 
+  dplyr::select(-prop_pos_diff) %>%
+  pivot_wider(., values_from = prop_pos, names_from = quantile) %>%
+  mutate(cover = ifelse(lwr < true & upr > true, 1, 0)) %>%
+  mutate(
+      prop_pos_diff = mid - true
+    , CI_wid = upr - lwr
+  ) %>% filter(prop_pos_true < 0.05, prop_overlap_quant < 0.1) %>%
+  group_by(mod.meth, log_mfi) %>%
+  summarize(
+      tot_cov = mean(cover, na.rm = T)
+    , m_diff  = mean(prop_pos_diff, na.rm = T)
+  )
+
+all_compare2 <- all_coef_ests %>% 
+  mutate(m_diff = ifelse(mid < true, m_diff * -1, m_diff)) %>% 
+  left_join(., sim.data.summaries %>% dplyr::select(
+    param_set, log_mfi
+    , prop_overlap_quant, mfi_skew_2
+    , diff_mean, prop_pos
+  )) %>%
+  filter(name %notin% c(
+    "mu_neg", "mu_pos", "mu_pos_delta"
+    , "sd_neg", "sd_pos", "theta_con2f_delta"
+  )) %>% filter(prop_pos < 0.05, prop_overlap_quant < 0.1) %>% 
+  group_by(mod.meth, log_mfi, name) %>%
+  summarize(
+     tot_cov = mean(cover, na.rm = T)
+    , m_diff  = mean(m_diff, na.rm = T)
+  )
+
+all_compare1 %>% {
+  ggplot(., aes(mod.meth, tot_cov)) + 
+    geom_point(aes(colour = mod.meth), size = 3) +
+    facet_wrap(~log_mfi) +
+    xlab("") +
+    ylab("Estimated - True Coefficient Estimate") +
+    theme(axis.text.x = element_blank())
+}
+
+all_compare1 %>% {
+  ggplot(., aes(mod.meth, m_diff)) + 
+    geom_point(aes(colour = mod.meth), size = 3) +
+    facet_wrap(~log_mfi) +
+    xlab("") +
+    ylab("Estimated - True Coefficient Estimate") +
+    theme(axis.text.x = element_blank())
+}
+
+all_compare2 %>% {
+    ggplot(., aes(mod.meth, tot_cov)) + 
+      geom_point(aes(colour = mod.meth), size = 3) +
+      facet_grid(log_mfi~name) +
+      xlab("") +
+      ylab("Estimated - True Coefficient Estimate") +
+      theme(axis.text.x = element_blank())
+}
+
+all_compare2 %>% {
+  ggplot(., aes(mod.meth, m_diff)) + 
+    geom_point(aes(colour = mod.meth), size = 3) +
+    facet_grid(log_mfi~name) +
+    xlab("") +
+    ylab("Estimated - True Coefficient Estimate") +
+    theme(axis.text.x = element_blank())
+}
+
+##### 
+## Supplement Figure 3: Bias in pop estimates across two distributional summaries
+#####
+
+all.out$pop_seropositivity %>% 
+  filter(model == "3sd") %>% 
+  mutate(method = plyr::mapvalues(method, from = c(
+    "assigned_group_control", "assigned_group_robust"
+  ), to = c(
+    "Approximated
+Control", "Robust Mean
+and SD"
+  ))) %>% 
+  mutate(log_mfi = plyr::mapvalues(log_mfi, from = c(
+    "log_mfi", "mfi"
+  ), to = c("Log MFI", "Linear MFI"))) %>% {
+    ggplot(., aes(true, prop_pos)) + 
+      geom_point(aes(colour = method)) +
+      geom_abline(intercept = 0, slope = 1) +
+      facet_wrap(~log_mfi) +
+      scale_colour_brewer(palette = "Dark2", name = "Method") +
+      xlab("True Proportion Positive") +
+      ylab("Estimated Proportion Positive")
   }
 
 all.out$pop_seropositivity %>% 
+  left_join(., sim.data.summaries %>% dplyr::select(
+    param_set, log_mfi
+  , prop_overlap_quant, mfi_skew_2
+  , diff_mean
+  )) %>% 
   filter(model == "3sd") %>%
-  filter(prop_pos_true < 0.1) %>% 
+  mutate(method = plyr::mapvalues(method, from = c(
+    "assigned_group_control", "assigned_group_robust"
+  ), to = c(
+    "Approximated
+Control", "Robust Mean
+and SD"
+  ))) %>% 
+  mutate(log_mfi = plyr::mapvalues(log_mfi, from = c(
+    "log_mfi", "mfi"
+  ), to = c("Log MFI", "Linear MFI"))) %>% 
+  dplyr::select(
+    method, log_mfi, prop_pos_diff
+  , prop_overlap_quant
+  , mfi_skew_2
+  , diff_mean
+  ) %>%
+  pivot_longer(-c(method, log_mfi, prop_pos_diff)) %>% 
+  mutate(name = plyr::mapvalues(
+    name
+  , from = c("prop_overlap_quant", "mfi_skew_2", "diff_mean")
+  , to   = c("Distribution Overlap", "Seropositive Skew", "Difference in MFI Means")
+  )) %>% {
+  ggplot(., aes(value, prop_pos_diff)) +
+      geom_point(aes(colour = method, shape = log_mfi)) +
+      scale_colour_brewer(palette = "Dark2", name = "Method") +
+      facet_wrap(~name, scales = "free_x") +
+      scale_shape_discrete(name = "MFI Scale") +
+      xlab("Value") +
+      ylab("Estimate - True Proportion Positive") +
+      theme(
+        axis.text.x = element_text(size = 12, angle = 300, hjust = 0)
+      )
+}
+
+##### 
+## Supplement Figure 4: More linkages between individual and population level seropositivity estimates
+#####
+
+source("scr_figure_plot.R")
+
+all.out$pop_seropositivity %>% 
+  filter(model == "3sd") %>%
+  filter(true < 0.1) %>% 
   mutate(log_mfi = plyr::mapvalues(log_mfi, from = c(
     "log_mfi", "mfi"
   ), to = c("Log MFI", "Raw MFI"))) %>%
@@ -178,6 +541,7 @@ Overlap") +
       facet_wrap(~log_mfi)
   }
 
+source("main_approach_pop_sero.R")
 
 ##### 3sd method and log vs not log on coef estimates ----- 
 
@@ -236,17 +600,38 @@ source("main_approach_coverage.R")
 
 ##### Parameter space exploration ----- 
 
-sim.data.summaries %>% ungroup() %>% 
-  filter(log_mfi == "log_mfi") %>% dplyr::select(
-    param_set, prop_pos, diff_mean, prop_overlap_quant
+sim.data.summaries %>% 
+  ungroup() %>% 
+  filter(log_mfi == "mfi") %>% dplyr::select(
+      prop_pos, diff_mean, prop_overlap_quant
     , mfi_skew_2, prop_squish_2, p_abv_m_2
+  ) %>% 
+  rename(
+      `Proportion 
+Seropositive` = prop_pos
+    , `Difference 
+in MFI Means` = diff_mean
+    , `Distribution 
+Overlap` = prop_overlap_quant
+    , `Seropositive 
+Skew` = mfi_skew_2
+    , `Quantile 
+Compression` = prop_squish_2
+    , `Proportion 
+Above Median` = p_abv_m_2
   ) %>% {
-    ggpairs(.) +
+    ggpairs(
+      .
+    , lower = list(continuous = wrap("points", alpha = 0.3), combo = wrap("dot_no_facet", alpha = 0.4))
+    ) +
       theme(
-        axis.text.x = element_text(size = 10, hjust = 0, angle = 300)
+          axis.text.x = element_text(size = 10, hjust = 0, angle = 300)
         , axis.text.y = element_text(size = 10)
         , strip.text.x = element_text(size = 10)
-      )
+        , strip.text.y = element_text(size = 10)
+      ) +
+      scale_x_log10() +
+      scale_y_log10()
   }
 
 ##### LCR method on fitting success ----- 

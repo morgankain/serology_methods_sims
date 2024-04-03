@@ -612,25 +612,53 @@ calculate_population_seropositivity <- function(three_sd.g, mclust.g, stan.g, pa
   three_sd.g %<>% 
     group_by(param_set, sim_num, sd_method, log_mfi) %>% 
     summarize(
-      true     = mean(group)
-    , prop_pos = mean(assigned_group)
-    ) %>% mutate(
-      prop_pos_diff = prop_pos - true 
-    ) %>% ungroup() %>% 
+        true     = mean(group)
+      , prop_pos = mean(assigned_group)
+      , tot_n    = n()
+      , tot_pos = sum(V2)
+    ) %>% ungroup() %>%
+    mutate(index = seq(n())) %>%
+    group_by(index) %>%
+    mutate(
+        lwr = (prop.test(tot_pos, tot_n))$conf.int[1]
+      , upr = (prop.test(tot_pos, tot_n))$conf.int[2]
+    ) %>%
+    rename(
+      mid = prop_pos
+    ) %>%
+    ungroup() %>% 
     mutate(model = "3sd", .before = 1) %>%
-    mutate(quantile = "mid", .after = "true") %>%
-    rename(method = sd_method)
+    rename(method = sd_method) %>%
+    pivot_longer(., c(lwr, mid, upr), names_to = "quantile", values_to = "prop_pos") %>%
+    ungroup() %>%
+    mutate(prop_pos_diff = prop_pos - true) %>%
+    dplyr::select(-c(tot_n, tot_pos, index)) %>%
+    relocate(quantile, .after = true)
   
   mclust.g %<>% 
     group_by(param_set, sim_num, method, log_mfi) %>% 
     summarize(
       true     = mean(group)
-    , prop_pos = sum(V2_adj) / n()
-    ) %>% mutate(
-      prop_pos_diff = prop_pos - true 
-    ) %>% ungroup() %>% 
+      , prop_pos = sum(V2_adj) / n()
+      , tot_n    = n()
+      , tot_pos = sum(assigned_group)
+    ) %>% ungroup() %>%
+    mutate(index = seq(n())) %>%
+    group_by(index) %>%
+    mutate(
+      lwr = (prop.test(tot_pos, tot_n))$conf.int[1]
+      , upr = (prop.test(tot_pos, tot_n))$conf.int[2]
+    ) %>%
+    rename(
+      mid = prop_pos
+    ) %>%
+    ungroup() %>% 
     mutate(model = "mclust", .before = 1) %>%
-    mutate(quantile = "mid", .after = "true") 
+    pivot_longer(., c(lwr, mid, upr), names_to = "quantile", values_to = "prop_pos") %>%
+    ungroup() %>%
+    mutate(prop_pos_diff = prop_pos - true) %>%
+    dplyr::select(-c(tot_n, tot_pos, index)) %>%
+    relocate(quantile, .after = true)
   
   stan.g %<>% 
     pivot_longer(-c(stan_model, param_set, sim_num, log_mfi, true)

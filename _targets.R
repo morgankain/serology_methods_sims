@@ -69,7 +69,7 @@ setup_targets <- tar_plan(
         complexity       = data_complexity
         
         ## Simulation and sample size
-      , n_param_sets     = 280
+      , n_param_sets     = 500
       , n_sims_per_set   = 1
       , n_samps          = c(100, 2000)
       

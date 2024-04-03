@@ -1,63 +1,125 @@
-dat_for_dist <- mclust.g %>% mutate(
-  group   = as.factor(group)
+rand_ps <- sample(seq(500), 5)
+rand_ps <- c(62, 127, 171, 265, 345)
+
+all.out$pop_seropositivity %>%
+  filter(model == "3sd") %>%
+  filter(method == "assigned_group_robust") %>%
+  filter(true < 0.04, mu_pos_delta > 3)
+
+all.out$pop_seropositivity %>% 
+  filter(
+    param_set %in% rand_ps
+  , model == "3sd"
+  ) %>% 
+  dplyr::select(param_set, method, log_mfi, true, prop_pos) %>%
+  pivot_wider(
+    names_from = c(method, log_mfi)
+  , values_from = c(true, prop_pos)
+  )
+
+dat_for_dist <- mclust.groups %>% mutate(
+    group   = as.factor(group)
   , sim_num = as.factor(sim_num)
 ) %>% filter(
-  method == "constrained_mclust"
+    method == "constrained_mclust"
   , log_mfi == "mfi"
-)
+) %>% 
+  filter(param_set %in% rand_ps)
 
-dat_for_points_sd <- three_sd.g %>% 
+dat_for_points_sd.c <- three_sd.groups %>% 
   mutate(
-    gp      = group - V2
+      gp      = group - V2
     , sim_num = as.factor(sim_num)
   ) %>%
   filter(
-    log_mfi == "mfi"
-    , sd_method == "assigned_group_sample_mfi"
-  ) 
+      log_mfi   == "mfi"
+    , sd_method == "assigned_group_control"
+  ) %>% 
+  filter(param_set %in% rand_ps)
 
-sd_cutoffs_sd <- data.frame(
-  param_set = rand_ps
-  , lwr = dat_for_points_sd %>% 
-    group_by(param_set) %>% 
-    filter(V1 == 1) %>%
-    filter(mfi == max(mfi)) %>%
-    pull(mfi)
-  , upr = dat_for_points_sd %>% 
+dat_for_points_sd.r <- three_sd.groups %>% 
+  mutate(
+      gp      = group - V2
+    , sim_num = as.factor(sim_num)
+  ) %>%
+  filter(
+      log_mfi   == "mfi"
+    , sd_method == "assigned_group_robust"
+  ) %>% 
+  filter(param_set %in% rand_ps)
+
+sd_cutoffs_sd.c <- dat_for_points_sd.c %>% 
+  group_by(param_set) %>% 
+  filter(V1 == 1) %>%
+  filter(mfi == max(mfi)) %>%
+  dplyr::select(param_set, mfi) %>%
+  rename(lwr = mfi) %>% left_join(
+    .
+    , dat_for_points_sd.c %>% 
+      group_by(param_set) %>% 
+      filter(V2 == 1) %>%
+      filter(mfi == min(mfi)) %>%
+      dplyr::select(param_set, mfi) %>%
+      rename(upr = mfi)
+  ) %>%
+  mutate(
+    cutoff = mean(c(lwr, upr), na.rm = T)
+  )
+
+sd_cutoffs_sd.r <- dat_for_points_sd.r %>% 
+  group_by(param_set) %>% 
+  filter(V1 == 1) %>%
+  filter(mfi == max(mfi)) %>%
+  dplyr::select(param_set, mfi) %>%
+  rename(lwr = mfi) %>% left_join(
+    .
+  , dat_for_points_sd.r %>% 
     group_by(param_set) %>% 
     filter(V2 == 1) %>%
     filter(mfi == min(mfi)) %>%
-    pull(mfi)
-) %>% 
-  mutate(cutoff = (lwr + upr) / 2)
+    dplyr::select(param_set, mfi) %>%
+    rename(upr = mfi)
+  ) %>%
+  mutate(
+    cutoff = mean(c(lwr, upr), na.rm = T)
+  )
 
-dat_for_points_sd %<>% 
+dat_for_points_sd.c %<>% 
   filter(gp != 0) %>%
   mutate(
     gp = ifelse(
       gp > 0
     , gp / 1000
-    , gp / 1000 #-0.0001
+    , -.0005
+   # , gp / 1000 #-0.0001
+   # , gp
+  #  , -.1
+    ) 
+  ) %>%
+  mutate(group = as.factor(group))
+
+dat_for_points_sd.r %<>% 
+  filter(gp != 0) %>%
+  mutate(
+    gp = ifelse(
+      gp > 0
+       , gp / 1000
+      , -.0005
+      # , gp / 1000 #-0.0001
+      #, gp
+     # , -.1
     ) 
   ) %>%
   mutate(group = as.factor(group))
   
-gg.1 <- dat_for_dist %>% {
-   ggplot(., aes(x = mfi
-                 #, y = after_stat(count / sum(count))
-          )) + 
+dat_for_dist %>% {
+   ggplot(., aes(x = mfi)) + 
     geom_vline(
-        data = sd_cutoffs_sd
+        data = sd_cutoffs_sd.c
       , aes(xintercept = cutoff)
       , linetype = "dashed"
     ) +
-#    geom_violinh(
-#      data = dat_for_points_sd
-#      , aes(x = mfi, y = gp
-#            , group = gp
-#      ) 
-#    ) +
-    geom_jitter(data = dat_for_points_sd 
+    geom_jitter(data = dat_for_points_sd.c 
               , aes(y = gp, colour = group)
               , height = 0.0001
     ) +
@@ -83,34 +145,108 @@ Serostatus"
         , "Positive"
         )
         ) +
-    facet_wrap(~param_set) +
-      xlab("MFI") +
+    facet_wrap(~param_set, nrow = 1) +
+      xlab("Log MFI") +
       theme(
           axis.text.x = element_text(
             size = 10
           , angle = 300
           , hjust = 0)
-        , axis.text.y = element_text(size = 10)
+        , axis.text.y = element_blank()
+        , axis.ticks.y = element_blank()
         , axis.title.y = element_text(size = 12)
-        , panel.spacing.x = unit(1, "lines")
+        , panel.spacing.x = unit(0, "lines")
+        , strip.text.x = element_blank()
       ) +
     scale_y_continuous(
-      name = "P(False Positive)     |  P(False Negative)"
+      name = "False Positives   |  False Negatives"
       , breaks = c(
-        -0.001, 0, 0.001
+     #   -0.001, 0, 0.001
+        -0.0005, 0, 0.01
       )
+      , limits = c(-0.0005, 0.001)
       , labels = c(
         "1"
 , ""
 , "1"
       )
     , sec.axis = dup_axis(
-      name = "Proportion of Population"
+      name = ""
       , breaks = c(
-        -.001, -0.0005, 0, 0.0005, 0.001
+     #   -.001, -0.0005, 0, 0.0005, 0.001
+        
       )
       , labels = c("", "", "0", "0.05", "0.1")
     )
+    )
+}
+
+dat_for_dist %>% {
+  ggplot(., aes(x = mfi)) + 
+    geom_vline(
+      data = sd_cutoffs_sd.r
+      , aes(xintercept = cutoff)
+      , linetype = "dashed"
+    ) +
+    geom_jitter(data = dat_for_points_sd.r 
+                , aes(y = gp, colour = group)
+                , height = 0.0001
+    ) +
+    geom_density(aes(fill = group, colour = group
+                     , group = interaction(sim_num, group))
+                 , alpha = 0.3
+    ) +  
+    scale_fill_brewer(
+      palette = "Dark2"
+      , name = "True
+Serostatus"
+      , labels = c(
+        "Negative"
+        , "Positive"
+      )
+    ) +
+    scale_colour_brewer(
+      palette = "Dark2"
+      , name = "True
+Serostatus"
+      , labels = c(
+        "Negative"
+        , "Positive"
+      )
+    ) +
+    facet_wrap(~param_set, nrow = 1) +
+    xlab("Log MFI") +
+    theme(
+      axis.text.x = element_text(
+          size = 10
+        , angle = 300
+        , hjust = 0)
+      , axis.text.y = element_blank()
+      , axis.ticks.y = element_blank()
+      , axis.title.y = element_text(size = 12)
+      , panel.spacing.x = unit(0, "lines")
+      , strip.text.x = element_blank()
+    ) +
+    scale_y_continuous(
+      name = "False Positives  |  False Negatives"
+      , breaks = c(
+        #   -0.001, 0, 0.001
+        -0.0005, 0, 0.01
+      )
+      , limits = c(-0.0005, 0.001)
+      , labels = c(
+        "1"
+        , ""
+        , "1"
+      )
+      , sec.axis = dup_axis(
+        name = ""
+        , breaks = c(
+          #   -.001, -0.0005, 0, 0.0005, 0.001
+          
+        )
+        , labels = c("", "", "0", "0.05", "0.1")
+      )
     )
 }
 
