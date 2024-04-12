@@ -5,8 +5,8 @@
 
 ## Use alt function to test for groupings 
 all_3sd_groupings <- group_via_3sd_alt(
-  simulated_data = fits$sim.data
-  , param_sets   = fits$sim.params
+  simulated_data = sim.data
+  , param_sets   = sim.params
   , groupings    = c("param_set", "sim_num", "log_mfi")
 )
 
@@ -30,7 +30,7 @@ all_3sd_groupings.s <- all_3sd_groupings %>%
     , correct_class_p  = 1 - misclass_error_p
   ) %>% mutate(
     quantile = "mid", .before = prob
-  ) %>% left_join(., fits$sim.params %>% dplyr::select(
+  ) %>% left_join(., sim.params %>% dplyr::select(
     param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
     , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
   ))
@@ -41,14 +41,14 @@ all_3sd_groupings.p <- all_3sd_groupings %>%
       true     = mean(group)
     , prop_pos = mean(assigned_group)
   ) %>% mutate(
-    prop_pos_diff = prop_pos - true 
+    prop_pos_diff = prop_pos / true 
   ) %>% ungroup() %>% 
   mutate(model = "3sd", .before = 1) %>%
   mutate(quantile = "mid", .after = "true") %>%
   rename(method = sd_method) %>% 
   left_join(
     .
-  , fits$sim.params %>% dplyr::select(
+  , sim.params %>% dplyr::select(
     param_set, sim_num, n_samps, beta_base, mu_neg, sd_neg
     , mu_pos, sd_pos, mu_pos_delta, sd_pos_delta
   )
@@ -92,6 +92,10 @@ filter(
 
 all_3sd_groupings.p %>% 
   mutate(true = plyr::round_any(true, 0.1)) %>%
+  mutate(log_mfi = plyr::mapvalues(log_mfi, from = c(
+    "log_mfi", "mfi"
+  ), to = c("Log MFI", "Linear MFI"))) %>%
+  filter(perc_sd != 2) %>%
   group_by(perc_sd, log_mfi, true) %>%
   summarize(
     m_error = mean(prop_pos_diff)
@@ -101,11 +105,15 @@ all_3sd_groupings.p %>%
     !(perc_sd == 1 & true == 0.8)
   ) %>% {
     ggplot(., aes(true, m_error)) +
-      geom_line(aes(colour = perc_sd)) +
-      geom_hline(yintercept = 0) +
+      geom_line(aes(colour = perc_sd, linetype = log_mfi)) +
+      scale_colour_discrete(name = "Percent
+of sorted
+MFI values") +
+      scale_linetype_discrete(name = "MFI Scale") +
+      geom_hline(yintercept = 1, linetype = "dashed") +
+      scale_y_log10() +
       xlab("True Proportion Seropositive (rounded to nearest 0.1)") +
-      ylab("Bias in Serostatus Estimate") +
-      facet_wrap(~log_mfi) 
+      ylab("Bias in Serostatus Estimate")
   }
 
 all_3sd_groupings.s %>% 

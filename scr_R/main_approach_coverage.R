@@ -2,11 +2,12 @@ stan.fit_stats <- stan.summary$fit_details %>%
   left_join(., sim.data.summaries.j) %>% 
   group_by(model_name, param_set, log_mfi) %>%
   summarize(
-    prop_overlap_quant = mean(prop_overlap_quant)
+      prop_overlap_quant = mean(prop_overlap_quant)
     , diff_mean = mean(diff_mean)
     , mfi_skew_2 = mean(mfi_skew_2)
     , prop_squish_2 = mean(prop_squish_2)
     , prop_pos_true = mean(prop_pos_true)
+#    , n_samps = mean(n_samps)
     , m_R = mean(max_Rhat)
     , m_D = mean(divergent_transitions)
     , m_T = mean(time_to_fit)
@@ -61,7 +62,8 @@ ci_wid_by_model <- all_coef_ests %>%
   dplyr::select(main_approach, sub_approach, log_mfi, name, param_set, CI_wid) %>%
   group_by(main_approach, sub_approach, log_mfi, param_set) %>%
   summarize(ci_wid_mean = mean(CI_wid, na.rm = T)) %>%
-  ungroup()
+  ungroup()# %>% 
+ # left_join(., sim.data.summaries.j %>% dplyr::select(param_set, n_samps) %>% group_by(param_set) %>% slice(1) %>% ungroup())
 
 the_best_fits <- param_coverage_by_model %>% 
   left_join(., ci_wid_by_model) %>%
@@ -88,7 +90,7 @@ best_fits %<>%
       rename(model = model_name)
   ) %>% mutate(
     ok_fit = ifelse((is.na(m_R) | m_R < 1.10), 1, 0)
-  )
+  ) 
 
 coef.cover <- best_fits %>% 
   mutate(cover = ifelse(is.na(cover), 0, cover)) %>%
@@ -130,7 +132,8 @@ Parameter", values = c(16, 6, 2, 12)) +
         , axis.ticks.length.x = unit(0, "cm")
       ) +
       xlab("") +
-      ylab("Coverage")
+      ylab("Coverage") +
+    geom_hline(yintercept = 0.95, linetype = "dashed")
   }
 
 gg.2 <- best_fits %>% 
@@ -149,11 +152,13 @@ gg.2 <- best_fits %>%
 )) %>% mutate(main_approach = factor(
   main_approach
   , levels = c("3sd", "Mclust", "Bayesian LCR"))
+  ) %>%
+  filter(
+    m_diff > -20
   ) %>% {
   ggplot(., aes(main_approach, m_diff)) +
-    geom_violin(aes(
-        colour = main_approach, fill = main_approach
-    )) +
+    #geom_violin(aes(colour = main_approach, fill = main_approach)) +
+    geom_boxplot(aes(fill = main_approach), alpha = 0.4) +
     scale_shape_manual(name = "Regression
 Parameter", values = c(16, 6, 2, 12)) +
     scale_colour_manual(values = c(
@@ -177,7 +182,9 @@ Parameter", values = c(16, 6, 2, 12)) +
     facet_wrap(~name) +
     scale_y_continuous(
       trans = "pseudo_log"
-    , breaks = c(50, 20, 5, 0, -5, -20, -50, -100, -250)) +
+   # , breaks = c(50, 20, 5, 0, -5, -20, -50, -100, -250)
+     , breaks = c(50, 20, 5, 0, -5, -20)
+   ) +
     geom_hline(yintercept = 0, linetype = "dashed")
   }
 
@@ -190,7 +197,7 @@ all_coef_ests <- all.out$coefficient_ests %>%
   mutate(cover = ifelse(is.na(cover), 0, cover)) %>%
   mutate(mod.meth = interaction(model, method)) %>%
   filter(name %notin% c(
-    "mu_neg", "mu_pos", "mu_pos_delta"
+      "mu_neg", "mu_pos", "mu_pos_delta"
     , "sd_neg", "sd_pos", "theta_con2f_delta"
   )) %>%
   mutate(
@@ -221,12 +228,15 @@ all_coef_ests <- all.out$coefficient_ests %>%
   )
 
 coef.cover <- all_coef_ests %>% 
+  left_join(., best_fits %>% dplyr::select(main_approach, sub_approach, log_mfi, param_set, ok_fit, name)) %>%
+  mutate(ok_fit = ifelse(is.na(ok_fit), 1, 0)) %>%
+ # filter(ok_fit == 1) %>%
   mutate(cover = ifelse(is.na(cover), 0, cover)) %>%
-  group_by(main_approach, sub_approach, name) %>%
-  summarize(
-      perc_cov = sum(cover) / n()
-    , m_bias   = mean(m_diff, na.rm = T)
-  ) %>% 
+  group_by(main_approach, sub_approach, name, param_set) %>%
+  summarize(cover = sum(cover)) %>%
+  mutate(cover = ifelse(cover > 0, 1, 0)) %>%
+  ungroup(param_set) %>%
+  summarize(perc_cov = sum(cover) / n()) %>% 
   ungroup() %>%
   arrange(perc_cov) %>% 
   mutate(m.s = interaction(main_approach, sub_approach, sep = " -- ")) %>%
@@ -239,20 +249,27 @@ coef.cover %>%
     , to   = c("Baseline (Intercept)", "Categorical Covariate 1"
                , "Categorical Covariate 2", "Continuous Covariate 1")
   )) %>% {
-    ggplot(., aes(m.s, perc_cov)) +
-      geom_point(aes(colour = m.s, shape = name), size = 3) +
-      scale_colour_discrete(name = "Approach") +
+    ggplot(., aes(perc_cov, m.s)) +
+      geom_point(aes(colour = main_approach, shape = name), size = 3) +
+      scale_colour_manual(values = c(
+        "#1b9e77"
+        , "#7570b3"
+        , "#e6ab02"
+      ), name = "Approach") +
+      
       scale_shape_manual(name = "Regression
 Parameter", values = c(16, 6, 2, 12)) +
       theme(
-        axis.text.x = element_blank()
-      , axis.ticks.length.x = unit(0, "cm")
-      , strip.text.x = element_text(size = 10)
+          strip.text.x = element_text(size = 11)
+        , plot.margin = unit(c(0.2,0.2,0.2,0.05), "cm")
+        , axis.text.x = element_text(size = 12)
+        , axis.text.y = element_text(size = 12)
       ) +
-      xlab("") +
-      ylab("Coverage") +
-      scale_y_continuous(lim = c(0, 1)) #+
-     # scale_y_continuous(breaks = c(2, 1, 0, -2, -4, -8)) #+
+      ylab("Model") +
+      xlab("Coverage") +
+      scale_x_continuous(lim = c(0, 1)) +
+      geom_vline(xintercept = 0.95, linetype = "dashed")
+    # scale_y_continuous(breaks = c(2, 1, 0, -2, -4, -8)) #+
     #  geom_hline(yintercept = 0, linetype = "dashed")
   }
 

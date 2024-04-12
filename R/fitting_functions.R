@@ -60,7 +60,7 @@ group_via_3sd           <- function(simulated_data, param_sets, groupings) {
 ## Explore grouping by 3sd across alternative strategies for determining sd
 group_via_3sd_alt       <- function(simulated_data, param_sets, groupings) {
   
-  perc_sd <- c(seq(0, 1, by = 0.05), 2)
+  perc_sd <- c(seq(0, 1, by = 0.1), 2)
   
   simulated_data.l <- simulated_data %>% split_tibble(., groupings)
   
@@ -120,7 +120,7 @@ group_via_3sd_alt       <- function(simulated_data, param_sets, groupings) {
   ) %>% do.call("rbind", .)
   
   three_sd.g %>% mutate(
-    group  = group - 1
+      group  = group - 1
     , V1     = ifelse(assigned_group == 1, 1, 0)
     , V2     = 1 - V1
     , assigned_group  = assigned_group - 1

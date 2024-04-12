@@ -1,4 +1,3 @@
-rand_ps <- sample(seq(500), 5)
 rand_ps <- c(62, 127, 171, 265, 345)
 
 all.out$pop_seropositivity %>%
@@ -22,7 +21,7 @@ dat_for_dist <- mclust.groups %>% mutate(
   , sim_num = as.factor(sim_num)
 ) %>% filter(
     method == "constrained_mclust"
-  , log_mfi == "mfi"
+  , log_mfi == "log_mfi"
 ) %>% 
   filter(param_set %in% rand_ps)
 
@@ -32,7 +31,7 @@ dat_for_points_sd.c <- three_sd.groups %>%
     , sim_num = as.factor(sim_num)
   ) %>%
   filter(
-      log_mfi   == "mfi"
+      log_mfi   == "log_mfi"
     , sd_method == "assigned_group_control"
   ) %>% 
   filter(param_set %in% rand_ps)
@@ -43,7 +42,7 @@ dat_for_points_sd.r <- three_sd.groups %>%
     , sim_num = as.factor(sim_num)
   ) %>%
   filter(
-      log_mfi   == "mfi"
+      log_mfi   == "log_mfi"
     , sd_method == "assigned_group_robust"
   ) %>% 
   filter(param_set %in% rand_ps)
@@ -89,11 +88,10 @@ dat_for_points_sd.c %<>%
   mutate(
     gp = ifelse(
       gp > 0
-    , gp / 1000
-    , -.0005
-   # , gp / 1000 #-0.0001
-   # , gp
-  #  , -.1
+  #  , gp / 1000
+  #  , -.0005
+     , gp * 4
+     , -.2
     ) 
   ) %>%
   mutate(group = as.factor(group))
@@ -103,11 +101,10 @@ dat_for_points_sd.r %<>%
   mutate(
     gp = ifelse(
       gp > 0
-       , gp / 1000
-      , -.0005
-      # , gp / 1000 #-0.0001
-      #, gp
-     # , -.1
+      # , gp / 1000
+     #  , -.0005
+      , gp * 4
+      , -.2
     ) 
   ) %>%
   mutate(group = as.factor(group))
@@ -127,24 +124,16 @@ dat_for_dist %>% {
                   , group = interaction(sim_num, group))
                  , alpha = 0.3
                    ) +  
-      scale_fill_brewer(
-        palette = "Dark2"
-        , name = "True
+    scale_colour_manual(
+      values = c("dodgerblue3", "firebrick3")
+      , name = "True
 Serostatus"
-      , labels = c(
-        "Negative"
-      , "Positive"
-      )
-      ) +
-      scale_colour_brewer(
-        palette = "Dark2"
-        , name = "True
+    ) +
+    scale_fill_manual(
+      values = c("dodgerblue3", "firebrick3")
+      , name = "True
 Serostatus"
-        , labels = c(
-          "Negative"
-        , "Positive"
-        )
-        ) +
+    ) +
     facet_wrap(~param_set, nrow = 1) +
       xlab("Log MFI") +
       theme(
@@ -161,10 +150,10 @@ Serostatus"
     scale_y_continuous(
       name = "False Positives   |  False Negatives"
       , breaks = c(
-     #   -0.001, 0, 0.001
-        -0.0005, 0, 0.01
+      #  -0.0005, 0, 0.01
+        -0.2, 0, 4
       )
-      , limits = c(-0.0005, 0.001)
+     # , limits = c(-0.0005, 0.001)
       , labels = c(
         "1"
 , ""
@@ -196,23 +185,17 @@ dat_for_dist %>% {
                      , group = interaction(sim_num, group))
                  , alpha = 0.3
     ) +  
-    scale_fill_brewer(
-      palette = "Dark2"
+    scale_colour_manual(
+      values = c("dodgerblue3", "firebrick3")
       , name = "True
 Serostatus"
-      , labels = c(
-        "Negative"
-        , "Positive"
-      )
+      , labels = c("Seropositive", "Seronegative")
     ) +
-    scale_colour_brewer(
-      palette = "Dark2"
+    scale_fill_manual(
+      values = c("dodgerblue3", "firebrick3")
       , name = "True
 Serostatus"
-      , labels = c(
-        "Negative"
-        , "Positive"
-      )
+      , labels = c("Seropositive", "Seronegative")
     ) +
     facet_wrap(~param_set, nrow = 1) +
     xlab("Log MFI") +
@@ -228,12 +211,12 @@ Serostatus"
       , strip.text.x = element_blank()
     ) +
     scale_y_continuous(
-      name = "False Positives  |  False Negatives"
+      name = "False Positives   |  False Negatives"
       , breaks = c(
-        #   -0.001, 0, 0.001
-        -0.0005, 0, 0.01
+        #  -0.0005, 0, 0.01
+        -0.2, 0, 4
       )
-      , limits = c(-0.0005, 0.001)
+      # , limits = c(-0.0005, 0.001)
       , labels = c(
         "1"
         , ""
