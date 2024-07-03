@@ -132,8 +132,6 @@ Estimate population level percent seropositivity
 ```{r set1_b, echo=TRUE, warning=FALSE, message=FALSE}
 dataset1.pop_mod    <- glm(seropositive ~ 1, family = "binomial", data = dataset1.linear_mfi)
 
-dataset1.pop_mod.ci <- 
-
 (dataset1.pop_pos <- c(confint(dataset1.pop_mod) %>% plogis(), coef(dataset1.pop_mod) %>% plogis()) %>%
   t() %>% 
   as.data.frame() %>%
@@ -142,7 +140,9 @@ dataset1.pop_mod.ci <-
     , approach = "3sd + glm"
     , .before = 1
     ) %>%
-  dplyr::rename(`50.0 %` = "(Intercept)"))
+  dplyr::rename(
+    mid = `(Intercept)`, lwr = `2.5 %`, upr = `97.5 %`
+    ))
 
 ```
 
@@ -164,7 +164,10 @@ dataset1.risk_mod <- glm(seropositive ~ cat1f + cat2f + con1f, family = "binomia
       coef
     , from = c("(Intercept)", "cat1f1", "cat2f1")
     , to = c("baseline", "cat1f", "cat2f")
-    ))
+    )) %>%
+  dplyr::rename(
+    mid = `50.0 %`, lwr = `2.5 %`, upr = `97.5 %`
+    )
 )
 ```
 
@@ -263,14 +266,18 @@ dataset2.risk_coef <- data.frame(
     , approach = "Normal-Normal LCR"
     , coef     = rownames(.)
     , .before  = 1
-  )
+  ) %>% dplyr::rename(
+    mid = `50%`, lwr = `2.5%`, upr = `97.5%`
+    )
 
- (samps.simp$pop_sero/nrow(dataset2.log)) %>% quantile(quants) %>% t() %>% 
+dataset2.pop_pos <- (samps.simp$pop_sero/nrow(dataset2.log)) %>% quantile(quants) %>% t() %>% 
   as.data.frame() %>%
   mutate(
       dataset  = 2
     , approach = "Normal-Normal LCR"
     , .before = 1
+    ) %>% dplyr::rename(
+    mid = `50%`, lwr = `2.5%`, upr = `97.5%`
     )
 ```
 
@@ -375,27 +382,30 @@ dataset3.risk_coef <- data.frame(
     , approach = "Normal-Skew Normal LCR"
     , coef     = rownames(.)
     , .before  = 1
-  )
+  ) %>% dplyr::rename(
+    mid = `50%`, lwr = `2.5%`, upr = `97.5%`
+    )
 
- (samps.simp$pop_sero/nrow(dataset3.log)) %>% quantile(quants) %>% t() %>% 
+dataset3.pop_pos <- (samps.simp$pop_sero/nrow(dataset3.log)) %>% quantile(quants) %>% t() %>% 
   as.data.frame() %>%
   mutate(
       dataset  = 3
     , approach = "Normal-Skew Normal LCR"
     , .before = 1
+    ) %>% dplyr::rename(
+    mid = `50%`, lwr = `2.5%`, upr = `97.5%`
     )
 ```
 
 #### Comparison to truth
 
 ```{r comb_a, echo=TRUE, warning=FALSE, message=FALSE}
-
-
+pop_pos_pred   <- rbind(dataset1.pop_pos, dataset2.pop_pos, dataset3.pop_pos)
+risk_coef_pred <- rbind(dataset1.risk_coef, dataset2.risk_coef, dataset3.risk_coef)
 ```
 
 
 ```{r comb_b, echo=TRUE, warning=FALSE, message=FALSE}
-
 
 ```
 
