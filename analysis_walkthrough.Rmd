@@ -1,0 +1,402 @@
+---
+title: "Serological Analysis Examples"
+author: "Morgan Kain"
+date: "2024-07-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(magrittr)
+knitr::opts_chunk$set(echo = TRUE)
+
+sim.data <- read.csv("data/sims_for_code_supp.csv") %>% 
+  mutate(
+    group     = as.factor(group)
+  , param_set = factor(param_set, levels = c(235, 462, 150))
+  )
+
+sim.params <- read.csv("data/sim_params_for_code_supp.csv")
+
+dataset1 <- sim.data %>% filter(param_set == 235)
+dataset2 <- sim.data %>% filter(param_set == 462)
+dataset3 <- sim.data %>% filter(param_set == 150)
+
+theme_set(theme_bw())
+suppressWarnings(
+  theme_update(
+    axis.text.x = element_text(size = 10)
+  , axis.text.y = element_text(size = 10)
+  , axis.title.x = element_text(size = 12)
+  , axis.title.y = element_text(size = 12)
+  , legend.title = element_text(size = 10)
+  , panel.grid.major = element_blank()
+  , panel.grid.minor = element_blank()
+  , strip.background = element_blank()
+  , panel.margin = unit(0, "lines")
+  , legend.key.size = unit(.55, "cm")
+  , legend.key = element_rect(fill = "white")
+  , panel.margin.y = unit(0.5, "lines")
+  , panel.border = element_rect(colour = "black", fill = NA, size = 1)
+  , strip.text.x = element_text(size = 16, colour = "black", face = "bold"))
+)
+```
+
+
+### Overview
+
+Here we present three serological datasets that are analyzed best using different methods. 
+
+The three datasets we focus on here are three of the 500 analyzed in the main text. These datasets were specifically chosen because they provide three different examples in regards to percent population seroposivity, the difference in mean MFI between seropositive and seronegative groups, and distributional skew. As described in the main text, seropositivity was simulated to be a function of 2 categorical covariates with two levels each (that could capture, for example, sex and species) and 1 continuous covariate (e.g., age in years).
+
+We conduct serostatus assignment and population-level seropositivity as well as derive inference about risk factors determining seropositivity using both a two step extreme value + logistic regression approach as well as a single step Bayesian latent class regression approach. Though we advocate against a two step approach, we present it here for one dataset to illustrate a point we make in the main text which is that for the types of parameter sets for which we advocate a 3sd approach (namely those that have low % seropositivity and a long right tail), inference on risk factors will either be unable to clearly identify the sign of the effect (i.e., CI overlapping zero) or will be over-confident (CI not including the true value).
+
+We work through the analysis process from visualization through diagnostics and finally a comparison between estimated values and truth, keeping turth hidden from the reader until the end.
+
+#### Visualization
+
+For the analysis of any new serological (MFI: Median/Mean Fluorescence Intensity) dataset, the first step should be a visual inspection of the MFI distribution to check for: a) bimodality, and b) if bimodality is present, evidence of right-skew in the right mode.
+
+Given our findings (see main text) that false-negative and false-positive serostatus assignment error rates, and thus bias in population-level seropositivity estimates, are lower for the 3sd extreme value when MFI is analyzed on a linear scale but for clustering methods when MFI is analyzed on a log scale, we advise visualization of of data on both scales. 
+
+The three datasets we will analyze here are visualized in Figure 1. 
+
+```{r mfi_hist, echo=FALSE, warning=FALSE, message=FALSE, fig.cap = "Three example MFI datasets (columns), visualized on the linear scale (top row) and log scale (bottom row)."}
+gg.1 <- sim.data %>% filter(log_mfi == "mfi") %>% {
+    ggplot(., aes(x = mfi)) +
+      geom_histogram(aes(y = ..count../sum(..count..)), bins = 100) +
+      facet_wrap(~param_set, scales = "free") +
+      theme(
+        strip.text.x = element_blank()
+      , axis.text.x = element_text(size = 8)
+      , panel.spacing = unit(1, "lines")
+        ) +
+      ylab("Proportion") +
+      xlab("MFI (linear scale)")
+  }
+
+gg.2 <- sim.data %>% filter(log_mfi == "mfi") %>% {
+    ggplot(., aes(x = mfi)) +
+      geom_histogram(aes(y = ..count../sum(..count..)), bins = 100) +
+      scale_x_log10() +
+      facet_wrap(~param_set, scales = "free") +
+      theme(
+        strip.text.x = element_blank()
+      , axis.text.y = element_text(size = 10)
+      , axis.text.x = element_text(size = 12)
+      , panel.spacing = unit(1, "lines")
+      ) +
+      ylab("Proportion") +
+      xlab("MFI (log scale)")
+  }
+
+gridExtra::grid.arrange(gg.1, gg.2, ncol = 1)
+```
+
+A few things stand out from these visualizations. First, the dataset pictured in the left column has a long right tail on the linear scale but no strong bimodality when visualized on either scale. This observation hints that seropositivity is likely quite low in this dataset (or that seronegative and seropositive individuals have very similar MFI values; however, this is unlikely in any empirical dataset). Second, both of the datasets in the right two columns have clear bimodality, which is especially prominant on the log scale. Third, the right mode of the right-most dataset has some clear left skew due to the MFI values getting "stacked up" at the machine maximum. 
+
+
+#### An analysis plan
+
+This visual inspection leads us to the following analysis plan for the three datasets for assigning serostatus. Dataset 1 (Figure 1, left column): 3sd with a cutoff derived from a robust mean and sd calculation using the R functions dplR::tbrm and jointseg::estimateSd, respectively; MFI analyzed on a linear scale. Estimation of population-level percent seropositivity using a binomial confidence interval. Analysis of risk factors of seropositivity using logistic regression with dichotomous serostatus assignments.
+
+Dataset 2 (Figure 1, center column): Bayesian LCR fitting normal distributions to log MFI. Estimation of population seroposivity and risk factors within the Bayesian model. 
+
+Dataset 3 (Figure 1, right column): Bayesian LCR fitting a normal and a skewnormal distribution to log MFI. Estimation of population seroposivity and risk factors within the Bayesian model.
+
+
+#### Analysis 
+
+##### Dataset 1
+
+Assign serostatus based on a 3sd cutoff
+
+```{r set1_a, echo=TRUE, warning=FALSE, message=FALSE}
+dataset1.linear_mfi <- dataset1 %>% 
+  filter(log_mfi == "mfi") %>% 
+  mutate(
+    cat1f = factor(cat1f)
+  , cat2f = factor(cat2f)
+  )
+
+mean1  <- dataset1.linear_mfi %>% pull(mfi) %>% dplR::tbrm()
+sd1    <- dataset1.linear_mfi %>% pull(mfi) %>% jointseg::estimateSd()
+thresh <- mean1 + 3 * sd1 
+
+dataset1.linear_mfi %<>% mutate(seropositive = ifelse(mfi > thresh, 1, 0))
+```
+
+Estimate population level percent seropositivity
+
+```{r set1_b, echo=TRUE, warning=FALSE, message=FALSE}
+dataset1.pop_mod    <- glm(seropositive ~ 1, family = "binomial", data = dataset1.linear_mfi)
+
+dataset1.pop_mod.ci <- 
+
+(dataset1.pop_pos <- c(confint(dataset1.pop_mod) %>% plogis(), coef(dataset1.pop_mod) %>% plogis()) %>%
+  t() %>% 
+  as.data.frame() %>%
+  mutate(
+      dataset  = 1
+    , approach = "3sd + glm"
+    , .before = 1
+    ) %>%
+  dplyr::rename(`50.0 %` = "(Intercept)"))
+
+```
+
+Predict impact of risk factors on seropositivity
+
+```{r set1_c, echo=TRUE, warning=FALSE, message=FALSE}
+dataset1.risk_mod <- glm(seropositive ~ cat1f + cat2f + con1f, family = "binomial", data = dataset1.linear_mfi)
+
+(dataset1.risk_coef <- confint(dataset1.risk_mod) %>% 
+    as.data.frame() %>% 
+    mutate(`50.0 %` = coef(dataset1.risk_mod)) %>%
+    mutate(
+      dataset  = 1
+    , approach = "3sd + glm"
+    , coef     = rownames(.)
+    , .before  = 1
+    ) %>% 
+    mutate(coef = plyr::mapvalues(
+      coef
+    , from = c("(Intercept)", "cat1f1", "cat2f1")
+    , to = c("baseline", "cat1f", "cat2f")
+    ))
+)
+```
+
+##### Dataset 2
+
+Assign serostatus, predict population-level seropositivity and risk factors
+
+```{r set2_a, echo=TRUE, warning=FALSE, message=FALSE}
+
+  ## just log mfi
+  dataset2.log <- dataset2 %>% filter(log_mfi == "log_mfi")
+
+  ## See code for function details. Establishes priors (which are sent in as data)
+  stan_priors <- build_stan_priors(
+    simulated_data = dataset2.log
+  , skew_fit       = FALSE
+    ## First trying with "naive" priors
+  , fit_attempt    = 1
+  )
+
+  ## Compile model
+  stan_model <- cmdstanr::cmdstan_model("stan_models/publication_model_normal_2.stan", pedantic = FALSE)
+  
+  ## Fit model. For model definition see ".stan" in the online supplemental material
+  stan_fit    <- try(R.utils::withTimeout(stan_model$sample(
+    data    = list(
+        N           = length(dataset2.log$mfi)
+      , y           = dataset2.log$mfi
+      , cat1f       = dataset2.log$cat1f
+      , cat2f       = dataset2.log$cat2f
+      , con1f       = dataset2.log$con1f
+      , beta_base_prior_m   = stan_priors$priors %>% filter(param == "beta_base_prior_m") %>% pull(prior)
+      , beta_base_prior_v   = stan_priors$priors %>% filter(param == "beta_base_prior_v") %>% pull(prior)
+      , mu_base_prior_m     = stan_priors$priors %>% filter(param == "mu_base_prior_m") %>% pull(prior)
+      , mu_diff_prior_m     = stan_priors$priors %>% filter(param == "mu_diff_prior_m") %>% pull(prior)
+      , sigma_base_prior_m  = stan_priors$priors %>% filter(param == "sigma_base_prior_m") %>% pull(prior)
+      , sigma_diff_prior_m  = stan_priors$priors %>% filter(param == "sigma_diff_prior_m") %>% pull(prior)
+      , mu_base_prior_v     = stan_priors$priors %>% filter(param == "mu_base_prior_v") %>% pull(prior)
+      , mu_pos_prior_v      = stan_priors$priors %>% filter(param == "mu_pos_prior_v") %>% pull(prior)
+      , sigma_base_prior_v  = stan_priors$priors %>% filter(param == "sigma_base_prior_v") %>% pull(prior)
+      , sigma_diff_prior_v  = stan_priors$priors %>% filter(param == "sigma_diff_prior_v") %>% pull(prior)
+    )
+    , init            = stan_priors$starting_conditions
+    , chains          = 4
+    , parallel_chains = 4
+    , max_treedepth   = 12
+    , iter_warmup     = 2000
+    , iter_sampling   = 1000
+    , adapt_delta     = 0.98
+    , seed            = 48389
+    , refresh         = 200
+  ), timeout = 3600
+  ), silent  = TRUE)
+  
+## Extract predictions
+stanfit     <- rstan::read_stan_csv(stan_fit$output_files())
+samps.mat   <- rstan::extract(stanfit, permuted = FALSE)
+samps.simp  <- rstan::extract(stanfit, permuted = TRUE)
+stansummary <- summary(stanfit)
+```
+
+Some quick diagnostics 
+
+```{r set2_b, echo=TRUE, warning=FALSE, message=FALSE}
+
+stan_fit$diagnostic_summary()
+
+samps.mat[ , , "beta_base"] %>% 
+  as.data.frame() %>% 
+  mutate(Sample = seq(n())) %>%
+  pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
+  ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
+      scale_color_brewer(palette = "Dark2")
+}
+(samps.mat[ , , "pop_sero"] / nrow(dataset2.log)) %>% 
+  as.data.frame() %>% 
+  mutate(Sample = seq(n())) %>%
+  pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
+  ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
+      scale_color_brewer(palette = "Dark2")
+}
+  
+```
+
+```{r set2_c, echo=TRUE, warning=FALSE, message=FALSE}
+quants <- c(0.025, 0.975, 0.500)
+## get CI for predictions of interest
+dataset2.risk_coef <- data.frame(
+  baseline = samps.simp$beta_base %>% quantile(quants)
+, cat1f    = samps.simp$beta_cat1f_delta %>% quantile(quants)
+, cat2f    = samps.simp$beta_cat2f_delta %>% quantile(quants)
+, con1f    = samps.simp$beta_con1f_delta %>% quantile(quants)
+) %>% t() %>% as.data.frame() %>%
+  mutate(
+      dataset  = 2
+    , approach = "Normal-Normal LCR"
+    , coef     = rownames(.)
+    , .before  = 1
+  )
+
+ (samps.simp$pop_sero/nrow(dataset2.log)) %>% quantile(quants) %>% t() %>% 
+  as.data.frame() %>%
+  mutate(
+      dataset  = 2
+    , approach = "Normal-Normal LCR"
+    , .before = 1
+    )
+```
+
+##### Dataset 3
+
+Assign serostatus, predict population-level seropositivity and risk factors
+
+```{r set3_a, echo=TRUE, warning=FALSE, message=FALSE}
+
+  ## just log mfi
+  dataset3.log <- dataset3 %>% filter(log_mfi == "log_mfi")
+
+  ## See code for function details. Establishes priors (which are sent in as data)
+  stan_priors <- build_stan_priors(
+    simulated_data = dataset3.log
+  , skew_fit       = TRUE
+    ## First trying with "naive" priors
+  , fit_attempt    = 1
+  )
+
+  ## Compile model
+  stan_model <- cmdstanr::cmdstan_model("stan_models/publication_model_skew_normal_wf_2.stan", pedantic = FALSE)
+  
+  ## Fit model. For model definition see ".stan" in the online supplemental material
+  stan_fit    <- try(R.utils::withTimeout(stan_model$sample(
+    data    = list(
+        N           = length(dataset3.log$mfi)
+      , y           = dataset3.log$mfi
+      , cat1f       = dataset3.log$cat1f
+      , cat2f       = dataset3.log$cat2f
+      , con1f       = dataset3.log$con1f
+      , beta_base_prior_m   = stan_priors$priors %>% filter(param == "beta_base_prior_m") %>% pull(prior)
+      , beta_base_prior_v   = stan_priors$priors %>% filter(param == "beta_base_prior_v") %>% pull(prior)
+      , mu_diff_prior_m     = stan_priors$priors %>% filter(param == "mu_diff_prior_m") %>% pull(prior)
+      , mu_diff_prior_v     = stan_priors$priors %>% filter(param == "mu_diff_prior_v") %>% pull(prior)
+      , mu_pos_prior_m      = stan_priors$priors %>% filter(param == "mu_pos_prior_m") %>% pull(prior)
+      , mu_pos_prior_v      = stan_priors$priors %>% filter(param == "mu_pos_prior_v") %>% pull(prior)
+      , sigma_base_prior_m  = stan_priors$priors %>% filter(param == "sigma_base_prior_m") %>% pull(prior)
+      , sigma_diff_prior_m  = stan_priors$priors %>% filter(param == "sigma_diff_prior_m") %>% pull(prior)
+      , sigma_base_prior_v  = stan_priors$priors %>% filter(param == "sigma_base_prior_v") %>% pull(prior)
+      , sigma_diff_prior_v  = stan_priors$priors %>% filter(param == "sigma_diff_prior_v") %>% pull(prior)
+      , skew_pos_prior_m    = min(dataset3.log %>% filter(group == 2) %>% pull(mfi) %>% skewness(), -1)
+      , skew_pos_prior_v    = 3
+      , skew_neg_prior_m    = 0
+      , skew_neg_prior_v    = 0.5
+    )
+    , init            = stan_priors$starting_conditions
+    , chains          = 4
+    , parallel_chains = 4
+    , max_treedepth   = 12
+    , iter_warmup     = 2000
+    , iter_sampling   = 1000
+    , adapt_delta     = 0.98
+    , seed            = 48389
+    , refresh         = 1000
+  ), timeout = 3600
+  ), silent  = TRUE)
+  
+## Extract predictions
+stanfit     <- rstan::read_stan_csv(stan_fit$output_files())
+samps.mat   <- rstan::extract(stanfit, permuted = FALSE)
+samps.simp  <- rstan::extract(stanfit, permuted = TRUE)
+stansummary <- summary(stanfit)
+  
+```
+
+Some quick diagnostics 
+
+```{r set3_b, echo=TRUE, warning=FALSE, message=FALSE}
+
+stan_fit$diagnostic_summary()
+
+samps.mat[ , , "beta_base"] %>% 
+  as.data.frame() %>% 
+  mutate(Sample = seq(n())) %>%
+  pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
+  ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
+      scale_color_brewer(palette = "Dark2")
+}
+(samps.mat[ , , "pop_sero"] / nrow(dataset3.log)) %>% 
+  as.data.frame() %>% 
+  mutate(Sample = seq(n())) %>%
+  pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
+  ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
+      scale_color_brewer(palette = "Dark2")
+}
+  
+```
+
+```{r set3_c, echo=TRUE, warning=FALSE, message=FALSE}
+## get CI for predictions of interest
+quants <- c(0.025, 0.975, 0.500)
+
+dataset3.risk_coef <- data.frame(
+  baseline = samps.simp$beta_base %>% quantile(quants)
+, cat1f    = samps.simp$beta_cat1f_delta %>% quantile(quants)
+, cat2f    = samps.simp$beta_cat2f_delta %>% quantile(quants)
+, con1f    = samps.simp$beta_con1f_delta %>% quantile(quants)
+) %>% t() %>% as.data.frame() %>%
+  mutate(
+      dataset  = 3
+    , approach = "Normal-Skew Normal LCR"
+    , coef     = rownames(.)
+    , .before  = 1
+  )
+
+ (samps.simp$pop_sero/nrow(dataset3.log)) %>% quantile(quants) %>% t() %>% 
+  as.data.frame() %>%
+  mutate(
+      dataset  = 3
+    , approach = "Normal-Skew Normal LCR"
+    , .before = 1
+    )
+```
+
+#### Comparison to truth
+
+```{r comb_a, echo=TRUE, warning=FALSE, message=FALSE}
+
+
+```
+
+
+```{r comb_b, echo=TRUE, warning=FALSE, message=FALSE}
+
+
+```
+
+

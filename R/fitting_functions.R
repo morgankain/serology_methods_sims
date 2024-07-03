@@ -32,12 +32,12 @@ group_via_3sd           <- function(simulated_data, param_sets, groupings) {
    
    x %>% mutate(
      assigned_group_robust = ifelse(
-       mfi > neg_set_a["mean_neg"] + 3 * neg_set_a["sd_neg"]
+       mfi > (neg_set_a["mean_neg"] + 3 * neg_set_a["sd_neg"])
        , 2
        , 1
      )
      , assigned_group_control = ifelse(
-       mfi > neg_set_b["mean_neg"] + 3 * neg_set_b["sd_neg"]
+       mfi > (neg_set_b["mean_neg"] + 3 * neg_set_b["sd_neg"])
        , 2
        , 1
      )
@@ -97,7 +97,7 @@ group_via_3sd_alt       <- function(simulated_data, param_sets, groupings) {
     
     x.t <- x %>% mutate(
       assigned_group_sample_mfi = ifelse(
-        mfi > neg_set["mean_neg"] + 3 * neg_set["sd_neg"]
+        mfi > (neg_set["mean_neg"] + 3 * neg_set["sd_neg"])
         , 2
         , 1
       )

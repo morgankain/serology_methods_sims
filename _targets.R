@@ -28,7 +28,7 @@ setup_targets <- tar_plan(
        ## : One categorical predictor affecting within-group values
       ## 2: One categorical and one continuous predictor affecting group identity
        ## : One categorical fixed and one categorical random effect affecting group identity
-      tar_target(data_complexity, 2)
+    tar_target(data_complexity, 2)
   
   , tar_target(models_to_compile,
       establish_models(       

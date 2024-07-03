@@ -5,6 +5,7 @@
 tar_load(all.out); tar_load(sim.data.summaries)
 tar_load(stan.summary); tar_load(mclust.groups)
 tar_load(three_sd.groups); tar_load(sim.params)
+tar_load(sim.data)
 
 all.out$group_assignment <- all.out$group_assignment %>% 
   left_join(., all.out$pop_seropositivity %>% 

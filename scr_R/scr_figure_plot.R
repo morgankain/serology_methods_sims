@@ -16,7 +16,8 @@ all.out$pop_seropositivity %>%
   , values_from = c(true, prop_pos)
   )
 
-dat_for_dist <- mclust.groups %>% mutate(
+dat_for_dist <- mclust.groups %>% 
+  mutate(
     group   = as.factor(group)
   , sim_num = as.factor(sim_num)
 ) %>% filter(
