@@ -189,7 +189,8 @@ titer.out.just_groups %<>% rbind(., pred_pos)
 
 pop_seropos <- (samps$pop_sero / nrow(titer.out)) %>% 
   quantile(c(0.025, 0.200, 0.500, 0.800, 0.975)) %>% 
-  t() %>% as.data.frame()
+  t() %>% 
+  as.data.frame()
 
 names(pop_seropos) <- c("lwr", "lwr_n", "mid", "upr_n", "upr")
 

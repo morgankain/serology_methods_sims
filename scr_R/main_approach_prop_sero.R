@@ -176,6 +176,21 @@ all_coefs_for_gg.2 %<>% ungroup() %>% mutate(
 )
 
 gg.1 <- param_coverage_by_model.all.adj %>%
+  mutate(
+    main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")
+  , m.s  = plyr::mapvalues(
+    m.s
+  , from = c(
+    "Mclust (Unconstrained; sum of 2-n)"
+  , "Mclust (Unconstrained; BIC collapsed)"
+  , "Mclust (2 group constrained)"
+  ) 
+  , to   = c(
+    "GMM (Unconstrained; sum of 2-n)"
+  , "GMM (Unconstrained; BIC collapsed)"
+  , "GMM (2 group constrained)"
+  )
+    )) %>%
   rename(Approach = m.s) %>% {
     ggplot(., aes(cover, Approach)) +
       geom_point(aes(colour = main_approach), size = 3) +
@@ -194,14 +209,15 @@ gg.1 <- param_coverage_by_model.all.adj %>%
         , legend.position = "none"
       ) +
       scale_x_continuous(
-        breaks = c(0.1, 0.35, 0.60, 0.85, 0.95)
-      , labels = c("10%", "35%", "60%", "85%", "95%")) +
+        breaks = c(0.1, 0.35, 0.60, 0.80, 0.95)
+      , labels = c("10%", "35%", "60%", "80%", "95%")) +
       xlab("Coverage") +
       ylab("Model") +
       geom_vline(xintercept = 0.95, linetype = "dashed")
   }
 
 gg.2 <- all_coefs_for_gg.2 %>% 
+  mutate(main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")) %>%
   filter(quantile == "mid") %>%
   mutate(m.s = factor(m.s, levels = levvs)) %>% 
   rename(Approach = m.s) %>% {

@@ -109,7 +109,13 @@ coef.cover <- best_fits %>%
     main_approach = factor(main_approach, levels = unique(main_approach))
   )
 
-gg.1 <- coef.cover %>% mutate(name = plyr::mapvalues(
+gg.1 <- coef.cover %>% 
+  mutate(main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")) %>%
+  mutate(main_approach = factor(
+    main_approach
+    , levels = c("3sd", "Bayesian LCR", "GMM"))
+  ) %>%
+  mutate(name = plyr::mapvalues(
   name
   , from = c("beta_base", "beta_cat1f_delta", "beta_cat2f_delta", "beta_con1f_delta")
   , to   = c("Baseline (Intercept)", "Categorical Covariate 1"
@@ -137,6 +143,7 @@ Parameter", values = c(16, 6, 2, 12)) +
   }
 
 gg.2 <- best_fits %>% 
+  mutate(main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")) %>%
   group_by(main_approach, param_set, name) %>% 
   slice(1) %>%
   ungroup() %>%
@@ -151,14 +158,14 @@ gg.2 <- best_fits %>%
              , "Categorical Covariate 2", "Continuous Covariate 1")
 )) %>% mutate(main_approach = factor(
   main_approach
-  , levels = c("3sd", "Mclust", "Bayesian LCR"))
+  , levels = c("3sd", "Bayesian LCR", "GMM"))
   ) %>%
   filter(
     m_diff > -20
   ) %>% {
   ggplot(., aes(main_approach, m_diff)) +
     #geom_violin(aes(colour = main_approach, fill = main_approach)) +
-    geom_boxplot(aes(fill = main_approach), alpha = 0.4) +
+    geom_boxplot(aes(fill = main_approach), alpha = 0.4, linewidth = 0.3) +
     scale_shape_manual(name = "Regression
 Parameter", values = c(16, 6, 2, 12)) +
     scale_colour_manual(values = c(
@@ -248,11 +255,38 @@ coef.cover %>%
     , from = c("beta_base", "beta_cat1f_delta", "beta_cat2f_delta", "beta_con1f_delta")
     , to   = c("Baseline (Intercept)", "Categorical Covariate 1"
                , "Categorical Covariate 2", "Continuous Covariate 1")
-  )) %>% {
+  )) %>%
+  mutate(main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")) %>%
+  mutate(main_approach = factor(
+    main_approach
+    , levels = c("3sd", "Bayesian LCR", "GMM"))
+  ) %>% mutate(
+    
+    m.s  = plyr::mapvalues(
+      m.s
+      , from = c(
+          "Mclust -- (Unconstrained; sum of 2-n) + unweighted regression"
+        , "Mclust -- (Unconstrained; sum of 2-n) + probability weighted regression"
+        , "Mclust -- (2 group constrained) + unweighted regression"
+        , "Mclust -- (2 group constrained) + probability weighted regression"
+        , "Mclust -- (Unconstrained; BIC collapsed) + unweighted regression"
+        , "Mclust -- (Unconstrained; BIC collapsed) + probability weighted regression"
+      ) 
+      , to   = c(
+          "GMM -- (Unconstrained; sum of 2-n) + unweighted regression"
+        , "GMM -- (Unconstrained; sum of 2-n) + probability weighted regression"
+        , "GMM -- (2 group constrained) + unweighted regression"
+        , "GMM -- (2 group constrained) + probability weighted regression"
+        , "GMM -- (Unconstrained; BIC collapsed) + unweighted regression"
+        , "GMM -- (Unconstrained; BIC collapsed) + probability weighted regression"
+      )
+    )
+    
+  ) %>% {
     ggplot(., aes(perc_cov, m.s)) +
       geom_point(aes(colour = main_approach, shape = name), size = 3) +
       scale_colour_manual(values = c(
-        "#1b9e77"
+          "#1b9e77"
         , "#7570b3"
         , "#e6ab02"
       ), name = "Approach") +

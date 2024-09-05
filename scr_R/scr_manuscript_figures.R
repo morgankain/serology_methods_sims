@@ -30,7 +30,6 @@ all.out$coefficient_ests <- all.out$coefficient_ests %>%
 all.out$coverage <- all.out$coverage %>% 
   left_join(., sim.data.summaries.j)
 
-
 ##### 
 ## Figure 1: 3sd approaches, log and linear
 #####
@@ -187,7 +186,7 @@ all.out$pop_seropositivity %>%
     , "publication_model_skew_normal_wf_2.stan.Bayesian LCR"
     )
     , to = c(
-        "Mclust -- (Unconstrained -- BIC collapsed)"
+        "GMM -- (Unconstrained -- BIC collapsed)"
       , "Bayesian LCR -- normal-normal"
       , "Bayesian LCR -- normal-skewnormal"
     ))
@@ -465,10 +464,28 @@ gg.2 <- all_compare1 %>% {
 
 gridExtra::grid.arrange(gg.1, gg.2, ncol = 1)
 
+## !!NOTE: Need to run main_approach_prop_sero.R to build "param_coverage_by_model.all.adj" for
+ ## use in this figure
+
 gg.1 <- all_compare1 %>% 
   mutate(Approach = factor(Approach, levels = c(
     unique(param_coverage_by_model.all.adj$m.s)
-  ))) %>% {
+  ))) %>% 
+  mutate(
+    main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")
+    , Approach  = plyr::mapvalues(
+      Approach
+      , from = c(
+        "Mclust (Unconstrained; sum of 2-n)"
+        , "Mclust (Unconstrained; BIC collapsed)"
+        , "Mclust (2 group constrained)"
+      ) 
+      , to   = c(
+        "GMM (Unconstrained; sum of 2-n)"
+        , "GMM (Unconstrained; BIC collapsed)"
+        , "GMM (2 group constrained)"
+      )
+    )) %>% {
   ggplot(., aes(tot_cov, Approach)) + 
     geom_point(aes(colour = main_approach, shape = log_mfi), size = 3) +
     ylab("Model") +
@@ -486,8 +503,8 @@ gg.1 <- all_compare1 %>%
       , legend.position = "none"
     ) +
     scale_x_continuous(
-        breaks = c(0.1, 0.35, 0.60, 0.85, 0.95)
-      , labels = c("10%", "35%", "60%", "85%", "95%")
+        breaks = c(0.1, 0.35, 0.60, 0.80, 0.95)
+      , labels = c("10%", "35%", "60%", "80%", "95%")
       , lim = c(0, 1)) +
     scale_shape_discrete(name = "MFI Scale") +
     geom_vline(xintercept = 0.95, linetype = "dashed")
@@ -521,6 +538,21 @@ gg.2 <- all_compare1 %>%
 gg.2 <- all_coefs_for_gg.2 %>% 
   mutate(m.s = factor(m.s, levels = levvs)) %>% 
   rename(Approach = m.s) %>%
+  mutate(
+    main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")
+    , Approach  = plyr::mapvalues(
+      Approach
+      , from = c(
+        "Mclust (Unconstrained; sum of 2-n)"
+        , "Mclust (Unconstrained; BIC collapsed)"
+        , "Mclust (2 group constrained)"
+      ) 
+      , to   = c(
+        "GMM (Unconstrained; sum of 2-n)"
+        , "GMM (Unconstrained; BIC collapsed)"
+        , "GMM (2 group constrained)"
+      )
+    )) %>%
   filter(quantile == "mid") %>%
   filter(true < 0.05, prop_overlap_quant < 0.2) %>% {
     ggplot(., aes(prop_pos_diff, Approach)) +
@@ -550,6 +582,8 @@ gg.2 <- all_coefs_for_gg.2 %>%
   }
 
 gridExtra::grid.arrange(gg.1, gg.2, ncol = 2)
+
+## !!NOTE: Need to run main_approach_coverage.R first
 
 gg.1 <- all_compare2 %>% {
     ggplot(., aes(Approach, tot_cov)) + 
@@ -641,6 +675,20 @@ parm_sets <- all_coefs_for_gg.2 %>%
   pull(param_set) %>%
   unique()
 
+to_vals <- c(
+    "3sd -- (Approximated control)"                                             
+  , "3sd -- (Robust Mean and SD)"
+  , "Bayesian LCR -- lognormal-lognormal"
+  , "Bayesian LCR -- normal-normal"
+  , "Bayesian LCR -- normal-skewnormal"
+  , "GMM -- (2 group constrained) + unweighted regression"                   
+  , "GMM -- (2 group constrained) + probability weighted regression"
+  , "GMM -- (Unconstrained; sum of 2-n) + unweighted regression"             
+  , "GMM -- (Unconstrained; sum of 2-n) + probability weighted regression"   
+  , "GMM -- (Unconstrained; BIC collapsed) + unweighted regression"          
+  , "GMM -- (Unconstrained; BIC collapsed) + probability weighted regression"
+)
+
 these_to_vals <- to_vals[c(
   4, 5, 3, 6, 7
 , 8, 9, 10, 11
@@ -651,11 +699,11 @@ gg.2 <- all_coef_ests %>%
   filter(param_set %in% parm_sets) %>%
   mutate(
     Approach = plyr::mapvalues(mod.meth, from = unique(mod.meth), to = these_to_vals)
-  ) %>% mutate(
-    Approach = factor(Approach, levels = c(
-      coef.cover$m.s %>% levels()
-    ))
-  ) %>% filter(
+  ) %>%
+    mutate(
+      Approach = factor(Approach, levels = c(
+        these_to_vals[c(10, 11, 6, 7, 4, 5, 8, 9, 2, 3, 1)]
+      ))) %>% filter(
     m_diff > -5, m_diff < 5
   ) %>% {
   ggplot(., aes(Approach, m_diff)) +
@@ -673,8 +721,8 @@ gg.2 <- all_coef_ests %>%
       theme(
           strip.text.x = element_blank()
         , plot.margin = unit(c(0.0,0.2,0.2,0.15), "cm")
-       # , axis.text.x = element_text(size = 8, angle = 330, hjust = 0, vjust = 0.5)
-        , axis.text.x = element_blank()
+        , axis.text.x = element_text(size = 8, angle = 330, hjust = 0, vjust = 0.5)
+      #  , axis.text.x = element_blank()
         , axis.text.y = element_text(size = 10)
         , legend.position = "none"
       ) +
@@ -714,28 +762,35 @@ all_coefs_for_gg.2 %>%
 ## See main_approach_coverage for required code
 
 ci_wid_by_model %>% 
+  left_join(., sim.params %>% dplyr::select(param_set, n_samps)) %>%
   mutate(m.s = interaction(main_approach, sub_approach, sep = " -- ")) %>%
   mutate(m.s = plyr::mapvalues(m.s, from = c(
-    "Mclust -- mclust (2 group constrained) + unweighted regression"
-  , "Mclust -- mclust (2 group constrained) + probability weighted regression"
-  , "Mclust -- mclust (Unconstrained) + unweighted regression"
-  , "Mclust -- mclust (Unconstrained) + probability weighted regression"
-  , "Mclust -- mclust (Unconstrained reduced) + unweighted regression"
-  , "Mclust -- mclust (Unconstrained reduced) + probability weighted regression"
+    "Mclust -- (2 group constrained) + unweighted regression"
+  , "Mclust -- (2 group constrained) + probability weighted regression"
+  , "Mclust -- (Unconstrained; BIC collapsed) + unweighted regression"
+  , "Mclust -- (Unconstrained; BIC collapsed) + probability weighted regression"
+  , "Mclust -- (Unconstrained; sum of 2-n) + unweighted regression"
+  , "Mclust -- (Unconstrained; sum of 2-n) + probability weighted regression"
+  , "3sd -- (Approximated control)"
+  , "3sd -- (Robust Mean and SD)"
   ), to = c(
-    "Mclust -- mclust (2 group constrained) + 
+      "GMM -- 2 group constrained + 
 unweighted regression"
-  , "Mclust -- mclust (2 group constrained) + 
+    , "GMM -- 2 group constrained + 
 probability weighted regression"
-  , "Mclust -- mclust (Unconstrained) + 
+    , "GMM -- Unconstrained; BIC collapsed + 
 unweighted regression"
-  , "Mclust -- mclust (Unconstrained) + 
+    , "GMM -- Unconstrained; BIC collapsed + 
 probability weighted regression"
-  , "Mclust -- mclust (Unconstrained reduced) + 
+    , "GMM -- Unconstrained; sum of 2-n + 
 unweighted regression"
-  , "Mclust -- mclust (Unconstrained reduced) + 
+    , "GMM -- Unconstrained; sum of 2-n + 
 probability weighted regression"
+   , "3sd -- Approximated control"
+   , "3sd -- Robust Mean and SD"
   ))) %>%
+  mutate(main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")) %>% 
+  mutate(main_approach = factor(main_approach, levels = c("3sd", "Bayesian LCR", "GMM"))) %>% 
   mutate(log_mfi = plyr::mapvalues(log_mfi, from = c(
     "log_mfi", "mfi"
   ), to = c("Log MFI", "Linear MFI"))) %>%
@@ -747,8 +802,14 @@ probability weighted regression"
   filter(ci_wid_mean < 200) %>% {
     ggplot(., aes(n_samps, ci_wid_mean)) +
       geom_point(aes(colour = `Main Approach`, shape = `MFI Scale`), alpha = 0.5) +
+      scale_colour_manual(values = c(
+        "#1b9e77"
+        , "#7570b3"
+        , "#e6ab02"
+      ), name = "Approach") +
       theme(
         strip.text.x = element_text(size = 9)
+      , axis.text.y = element_text(size = 11)
       , plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm")
       ) +
       scale_y_log10(
@@ -776,26 +837,32 @@ param_coverage_by_model %>%
   ungroup() %>%
   mutate(m.s = interaction(main_approach, sub_approach, sep = " -- ")) %>%
   mutate(m.s = plyr::mapvalues(m.s, from = c(
-    "Mclust -- mclust (2 group constrained) + unweighted regression"
+      "Mclust -- mclust (2 group constrained) + unweighted regression"
     , "Mclust -- mclust (2 group constrained) + probability weighted regression"
-    , "Mclust -- mclust (Unconstrained) + unweighted regression"
-    , "Mclust -- mclust (Unconstrained) + probability weighted regression"
     , "Mclust -- mclust (Unconstrained reduced) + unweighted regression"
     , "Mclust -- mclust (Unconstrained reduced) + probability weighted regression"
+    , "Mclust -- mclust (Unconstrained) + unweighted regression"
+    , "Mclust -- mclust (Unconstrained) + probability weighted regression"
+    , "3sd -- 3sd (Approximated control)"
+    , "3sd -- 3sd (Robust Mean and SD)"
   ), to = c(
-    "Mclust -- mclust (2 group constrained) + 
+    "GMM -- 2 group constrained + 
 unweighted regression"
-    , "Mclust -- mclust (2 group constrained) + 
+    , "GMM -- 2 group constrained + 
 probability weighted regression"
-    , "Mclust -- mclust (Unconstrained) + 
+    , "GMM -- Unconstrained; BIC collapsed + 
 unweighted regression"
-    , "Mclust -- mclust (Unconstrained) + 
+    , "GMM -- Unconstrained; BIC collapsed + 
 probability weighted regression"
-    , "Mclust -- mclust (Unconstrained reduced) + 
+    , "GMM -- Unconstrained; sum of 2-n + 
 unweighted regression"
-    , "Mclust -- mclust (Unconstrained reduced) + 
+    , "GMM -- Unconstrained; sum of 2-n + 
 probability weighted regression"
+    , "3sd -- Approximated control"
+    , "3sd -- Robust Mean and SD"
   ))) %>%
+  mutate(main_approach = plyr::mapvalues(main_approach, from = "Mclust", to = "GMM")) %>% 
+  mutate(main_approach = factor(main_approach, levels = c("3sd", "Bayesian LCR", "GMM"))) %>% 
   mutate(log_mfi = plyr::mapvalues(log_mfi, from = c(
     "log_mfi", "mfi"
   ), to = c("Log MFI", "Linear MFI"))) %>%
@@ -807,8 +874,14 @@ probability weighted regression"
    mutate(m_cov = m_cov / 4) %>% {
       ggplot(., aes(n_samps, m_cov)) +
         geom_point(aes(colour = `Main Approach`, shape = `MFI Scale`)) +
+       scale_colour_manual(values = c(
+         "#1b9e77"
+         , "#7570b3"
+         , "#e6ab02"
+       ), name = "Approach") +
         theme(
            strip.text.x = element_text(size = 9)
+           , axis.text.y = element_text(size = 11)
          , plot.margin = unit(c(0.2,0.2,0.2,0.2), "cm")
         ) +
         xlab("Sample Size") +
