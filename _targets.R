@@ -35,7 +35,6 @@ setup_targets <- tar_plan(
         model_set = c(
          "publication_model_normal_2.stan"
        , "publication_model_lognormal_2.stan"
-       , "publication_model_skew_normal_2.stan"
        , "publication_model_skew_normal_wf_2.stan"
        )
      , complexity = data_complexity
