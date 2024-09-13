@@ -455,7 +455,7 @@ A) Assign serostatus, predict seroprevalence, and risk factors for individual se
 
   ## Compile model
   stan_model <- cmdstanr::cmdstan_model(
-    "stan_models/publication_model_skew_normal_wf_2.stan"
+    "stan_models/publication_model_skew_normal_2.stan"
   , pedantic = FALSE)
   
   ## Fit model. For model definition see ".stan" in the online supplemental material
