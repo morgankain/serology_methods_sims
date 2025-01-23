@@ -9,6 +9,15 @@ data {
   array[N] int<lower = 1> cat1r;
   vector[N] con1f;
 
+  real beta_base_prior_m;
+  real beta_base_prior_v;
+
+  real mu_base_prior_m;
+  real mu_diff_prior_m;  real sigma_base_prior_m;  real sigma_diff_prior_m;
+
+  real mu_base_prior_v;
+  real mu_diff_prior_v;  real sigma_base_prior_v;  real sigma_diff_prior_v;
+
 }
 
 parameters {
@@ -21,12 +30,11 @@ parameters {
   real beta_base;
 
   real beta_cat1f_delta;
-  real theta_cat2f_mu; 
+  real beta_cat2f_delta;
+  real beta_con1f_delta; 
 
   real<lower=0> theta_cat1r_sd;
   array[N_cat1r] real theta_cat1r_eps;
-
-  real beta_con1f_delta; 
 
 }
 
@@ -39,10 +47,10 @@ transformed parameters {
   array[N_cat1r] real cat1r_dev; 
 
   sigma[1] = sigma_base;
-  sigma[2] = sigma_base + sigma_diff; 
+  sigma[2] = sigma_base * sigma_diff; 
 
   for (n in 1:N) {  
-   beta_vec[n] = inv_logit(beta_base + beta_cat1f_delta * cat1f[n] + beta_con1f_delta * con1f[n]);
+   beta_vec[n] = inv_logit(beta_base + beta_cat1f_delta * cat1f[n] + beta_cat2f_delta * cat2f[n] + beta_con1f_delta * con1f[n]);
   }
 
   for (n in 1:N_cat1r) { 
@@ -51,7 +59,7 @@ transformed parameters {
 
   for (n in 1:N) {
    mu[1, n] = mu_base + cat1r_dev[cat1r[n]];
-   mu[2, n] = mu[1, n] + cat2f[n] * theta_cat2f_mu + mu_diff;
+   mu[2, n] = mu[1, n] + mu_diff;
   }
 
 } 
@@ -60,21 +68,20 @@ model {
 
 // --- Priors --- // 
 
- mu_base ~ normal(0, 2);
- mu_diff ~ normal(0, 2); 
+ mu_base ~ normal(mu_base_prior_m, mu_base_prior_v);
+ mu_diff ~ normal(mu_diff_prior_m, mu_diff_prior_v);
 
- sigma_base ~ normal(0, 2);
- sigma_diff ~ normal(0, 2);
+ sigma_base ~ normal(sigma_base_prior_m, sigma_base_prior_v);
+ sigma_diff ~ normal(sigma_diff_prior_m, sigma_diff_prior_v);
 
- theta_cat2f_mu ~ normal(0, 1);
+ beta_base ~ normal(beta_base_prior_m, beta_base_prior_v);
 
- beta_base ~ normal(0, 3);
  beta_cat1f_delta ~ normal(0, 3);
+ beta_cat2f_delta ~ normal(0, 3);
+ beta_con1f_delta ~ normal(0, 3);
 
  theta_cat1r_sd  ~ inv_gamma(8, 15);
  theta_cat1r_eps ~ normal(0, 3);
-
- beta_con1f_delta ~ normal(0, 3);
 
 
 // --- Model --- // 
