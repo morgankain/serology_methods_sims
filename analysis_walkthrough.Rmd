@@ -5,7 +5,9 @@ output: pdf_document
 ---
 
 ```{r setup_a, include=FALSE}
-library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(plyr)
 library(ggplot2)
 library(magrittr)
 library(cmdstanr)
@@ -13,6 +15,12 @@ library(formatR)
 register_knitr_engine(override = FALSE)
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(tidy = FALSE)
+
+split_tibble <- function(tibble, col = 'col') {
+  temp_list <- tibble %>% split(., .[, col])
+  ## allow for multiple grouping columns, but drop those entries with no records
+  temp_list[(lapply(temp_list, nrow) %>% unlist() > 0)]
+} 
 
 build_stan_priors <- function(simulated_data, skew_fit, fit_attempt) {
 
@@ -34,7 +42,7 @@ if (fit_attempt == 1) {
     , skew_pos_prior_v    = 3
   ) %>% t() %>% 
     as.data.frame() %>%
-    rename(prior = V1) %>%
+    dplyr::rename(prior = V1) %>%
     mutate(param = rownames(.), .before = 1)
   } else {
   prior_dat <- data.frame(
@@ -52,7 +60,7 @@ if (fit_attempt == 1) {
     , skew_pos_prior_v    = 1
   ) %>% t() %>% 
     as.data.frame() %>%
-    rename(prior = V1) %>%
+    dplyr::rename(prior = V1) %>%
     mutate(param = rownames(.), .before = 1)
   }
     
@@ -79,7 +87,7 @@ if (fit_attempt == 1) {
         , skew_pos_prior_v    = 3
       ) %>% t() %>% 
         as.data.frame() %>%
-        rename(prior = V1) %>%
+        dplyr::rename(prior = V1) %>%
         mutate(param = rownames(.), .before = 1)
     } else {
       prior_dat <- data.frame(
@@ -97,7 +105,7 @@ if (fit_attempt == 1) {
         , skew_pos_prior_v    = 1
       ) %>% t() %>% 
         as.data.frame() %>%
-        rename(prior = V1) %>%
+        dplyr::rename(prior = V1) %>%
         mutate(param = rownames(.), .before = 1)
     }
     
@@ -148,7 +156,7 @@ suppressWarnings(
 )
 ```
 
-```{r setup_b, include=FALSE}
+```{r setup_b, include=FALSE, cache=FALSE}
 
 sim.data <- read.csv("data/sims_for_code_supp.csv") %>% 
   mutate(
@@ -160,7 +168,7 @@ sim.params <- read.csv("data/sim_params_for_code_supp.csv")
 
 sim.params.t <- sim.params %>% 
 mutate(param_set = plyr::mapvalues(param_set, from = c("150", "235", "462"), to = c(3,1,2))) %>%
-  rename(dataset = param_set) %>% 
+  dplyr::rename(dataset = param_set) %>% 
   dplyr::select(dataset, beta_base, beta_cat1f_delta, beta_cat2f_delta, beta_con1f_delta) %>%
   pivot_longer(-dataset, values_to = "true", names_to = "coef") %>% 
   mutate(coef = plyr::mapvalues(
@@ -191,7 +199,7 @@ Given our findings (see main text) that false-negative and false-positive serost
 
 Our three datasets chosen for analysis here are visualized in Figure 1. 
 
-```{r mfi_hist, echo=FALSE, warning=FALSE, message=FALSE, fig.cap = "Three example MFI datasets (columns), visualized on the linear scale (top row) and log scale (bottom row)."}
+```{r mfi_hist, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Three example MFI datasets (columns), visualized on the linear scale (top row) and log scale (bottom row)."}
 gg.1 <- sim.data %>% filter(log_mfi == "mfi") %>% {
     ggplot(., aes(x = mfi)) +
       geom_histogram(aes(y = ..count../sum(..count..)), bins = 100) +
@@ -241,7 +249,7 @@ Dataset 3 (Figure 1, right column): Bayesian LCR fitting a normal and a skewnorm
 
 A) Assign serostatus based on a 3sd cutoff
 
-```{r set1_a, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set1_a, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 dataset1.linear_mfi <- dataset1 %>% 
   filter(log_mfi == "mfi") %>% 
   mutate(
@@ -258,7 +266,7 @@ dataset1.linear_mfi %<>% mutate(seropositive = ifelse(mfi > thresh, 1, 0))
 
 B) Estimate seroprevalence
 
-```{r set1_b, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set1_b, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 dataset1.pop_mod  <- glm(seropositive ~ 1, family = "binomial"
                          , data = dataset1.linear_mfi)
 
@@ -279,7 +287,7 @@ dataset1.pop_mod  <- glm(seropositive ~ 1, family = "binomial"
 
 C) Estimate the impacts of risk factors on individual seropositivity
 
-```{r set1_c, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set1_c, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 dataset1.risk_mod   <- glm(seropositive ~ cat1f + cat2f + con1f
                            , family = "binomial", data = dataset1.linear_mfi)
 
@@ -307,7 +315,7 @@ dataset1.risk_mod   <- glm(seropositive ~ cat1f + cat2f + con1f
 
 A) Assign serostatus, predict seroprevalence, and estimate risk factors for individual seropositivity
 
-```{r set2_a, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set2_a, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 
   ## just log mfi
   dataset2.log <- dataset2 %>% filter(log_mfi == "log_mfi")
@@ -374,17 +382,17 @@ samps.simp2  <- rstan::extract(stanfit, permuted = TRUE)
 
 B) Run some diagnostics (for more extensive diagnostics and a broader discussion of model convergence see: Bayesian Workflow. Gelman et al. 2020, arXiv and the Stan manual) 
 
-```{r set2_b, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set2_b, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 
 stan_fit2$diagnostic_summary()
 
 ```
 
-```{r set2_c, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Traceplot for baseline seropositivity (`Intercept`) parameter"}
+```{r set2_c, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Traceplot for baseline seropositivity (`Intercept`) parameter"}
 
 samps.mat2[ , , "beta_base"] %>% 
   as.data.frame() %>% 
-  mutate(Sample = seq(n())) %>%
+  dplyr::mutate(Sample = seq(dplyr::n())) %>%
   pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
   ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
       scale_color_brewer(palette = "Dark2")
@@ -392,11 +400,11 @@ samps.mat2[ , , "beta_base"] %>%
 
 ```
 
-```{r set2_d, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Traceplot for seroprevalence estimates"}
+```{r set2_d, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Traceplot for seroprevalence estimates"}
 
 (samps.mat2[ , , "pop_sero"] / nrow(dataset2.log)) %>% 
   as.data.frame() %>% 
-  mutate(Sample = seq(n())) %>%
+  dplyr::mutate(Sample = seq(dplyr::n())) %>%
   pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
   ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
       scale_color_brewer(palette = "Dark2")
@@ -406,7 +414,7 @@ samps.mat2[ , , "beta_base"] %>%
 
 C) Summarize model output for downstream model comparisons
 
-```{r set2_e, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set2_e, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 quants <- c(0.025, 0.975, 0.500)
 ## get CI for predictions of interest
 dataset2.risk_coef <- data.frame(
@@ -440,7 +448,7 @@ dataset2.pop_pos <- (samps.simp2$pop_sero/nrow(dataset2.log)) %>%
 
 A) Assign serostatus, predict seroprevalence, and risk factors for individual seropositivity
 
-```{r set3_a, echo=TRUE, message=FALSE, warning=FALSE}
+```{r set3_a, echo=TRUE, message=FALSE, warning=FALSE, cache=FALSE}
 
   ## just log mfi
   dataset3.log <- dataset3 %>% filter(log_mfi == "log_mfi")
@@ -505,7 +513,7 @@ A) Assign serostatus, predict seroprevalence, and risk factors for individual se
   ), timeout = 3600
   ), silent  = TRUE)
   
-## Extract predictions
+  ## Extract predictions
 stanfit      <- rstan::read_stan_csv(stan_fit3$output_files())
 samps.mat3   <- rstan::extract(stanfit, permuted = FALSE)
 samps.simp3  <- rstan::extract(stanfit, permuted = TRUE)
@@ -514,17 +522,17 @@ samps.simp3  <- rstan::extract(stanfit, permuted = TRUE)
 
 B) Some diagnostics for this second fit
 
-```{r set3_b, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set3_b, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 
 stan_fit3$diagnostic_summary()
 
 ```
 
-```{r set3_c, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Traceplot for baseline seropositivity (`Intercept`) parameter"}
+```{r set3_c, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Traceplot for baseline seropositivity (`Intercept`) parameter"}
 
 samps.mat3[ , , "beta_base"] %>% 
   as.data.frame() %>% 
-  mutate(Sample = seq(n())) %>%
+  dplyr::mutate(Sample = seq(dplyr::n())) %>%
   pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
   ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
       scale_color_brewer(palette = "Dark2")
@@ -532,11 +540,11 @@ samps.mat3[ , , "beta_base"] %>%
   
 ```
 
-```{r set3_d, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Traceplot for seroprevalence estimates"}
+```{r set3_d, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Traceplot for seroprevalence estimates"}
 
 (samps.mat3[ , , "pop_sero"] / nrow(dataset3.log)) %>% 
   as.data.frame() %>% 
-  mutate(Sample = seq(n())) %>%
+  dplyr::mutate(Sample = seq(dplyr::n())) %>%
   pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
   ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
       scale_color_brewer(palette = "Dark2")
@@ -546,7 +554,7 @@ samps.mat3[ , , "beta_base"] %>%
 
 C) Summarize model output for downstream model comparisons
 
-```{r set3_e, echo=TRUE, warning=FALSE, message=FALSE}
+```{r set3_e, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 ## get CI for predictions of interest
 quants <- c(0.025, 0.975, 0.500)
 
@@ -580,14 +588,14 @@ dataset3.pop_pos <- (samps.simp3$pop_sero/nrow(dataset3.log)) %>%
 
 ### Comparison to truth
 
-```{r comb_a, echo=TRUE, warning=FALSE, message=FALSE}
+```{r comb_a, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
 pop_pos_pred   <- rbind(dataset1.pop_pos, dataset2.pop_pos, dataset3.pop_pos)
 risk_coef_pred <- rbind(dataset1.risk_coef, dataset2.risk_coef, dataset3.risk_coef)
 ```
 
 Individual seropositivity, dataset 1, analyzed with a 3sd approach: visualized in Figure 6. This analysis resulted in five false-positives (true positive assigned negative; positive-negative), 13 false-negatives (negative-positive), and many correct negative-negative and positive-positive values.
 
-```{r comb_b, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Serostatus assignments. Dashed vertical line gives 3sd cutoff; values to the left are assigned a negative status, values to the right a positive status."}
+```{r comb_b, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Serostatus assignments. Dashed vertical line gives 3sd cutoff; values to the left are assigned a negative status, values to the right a positive status."}
 
 dataset1.linear_mfi %>% mutate(group = as.numeric(group) - 1) %>%
   mutate(pred_c = seropositive - group) %>% {
@@ -603,7 +611,7 @@ dataset1.linear_mfi %>% mutate(group = as.numeric(group) - 1) %>%
 
 Individual seropositivity, dataset 2, analyzed with a Normal-Normal LCR approach: visualized in Figure 7. With these clearly separated distributions the mixture model is highly accurate; that is, few true seropositive individuals are given a high probability of being seronegative and vice versa. 
 
-```{r comb_c, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Seropositive probability estimate (median) shown in blue; true serostatus shown as jittered black points (0 = seronegative, 1 = seropositive)."}
+```{r comb_c, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Seropositive probability estimate (median) shown in blue; true serostatus shown as jittered black points (0 = seronegative, 1 = seropositive)."}
 
 dataset2.log %>% mutate(
   pred_prob = samps.simp2$membership_p[,1,] %>% colMeans()
@@ -621,7 +629,7 @@ dataset2.log %>% mutate(
 Individual seropositivity, dataset 3, analyzed with a Normal-Skew Normal LCR approach: visualized in Figure 8. Because of the sizeable overlap in distributions and large left-skew in the seropositive MFI distribution, a large number of false-negatives arise (i.e., small positive probabilities assigned to true seropositivies). We note however that analyzing such a dataset with a 3sd approach using a robust mean and sd calculation would lead to 100% of seropositives being assigned a seronegative status.
 
 
-```{r comb_d, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "Seropositive probability estimate (median) shown in blue; true serostatus shown as jittered black points (0 = seronegative, 1 = seropositive)."}
+```{r comb_d, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Seropositive probability estimate (median) shown in blue; true serostatus shown as jittered black points (0 = seronegative, 1 = seropositive)."}
 
 dataset3.log %>% mutate(
   pred_prob = samps.simp3$membership_p[,1,] %>% colMeans()
@@ -638,7 +646,7 @@ dataset3.log %>% mutate(
 
 Population seropositivity, all datasets. Estimates for the two LCR models show high confidence (narrow CI) because of high confidence in the shapes of the two distributions. This leads to over-confidence (and thus CI that do not cover the true value) for the Normal-Skew Normal model.
 
-```{r comb_e, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "True vs estimated seroprevalence. Intervals are 95% CI."}
+```{r comb_e, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "True vs estimated seroprevalence. Intervals are 95% CI."}
 
 data.frame(
   dataset  = c(1, 2, 3)
@@ -665,7 +673,7 @@ data.frame(
 
 Risk factors (regression coefficients). Here, because of the low seroprevalence in dataset 1, power is very low to estimate the effects of risk factors on seropositivity and thus CI on most of the coefficients for the 3sd + logistic regression are very wide. This is in contrast to using the two step 3sd + logistic regression approach in general. CI on these regression coefficients tend to be much too narrow (undercover) when seroprevalence is higher (see main text). As was found for a number of other LCR model fits (see main text for more details), for the Normal-Skew Normal example fit here, one level of the categorical covariates (the "Intercept") was estimated to be too large and another too small.
 
-```{r comb_f, echo=TRUE, warning=FALSE, message=FALSE, fig.cap = "True vs estimated risk factors (regression coefficients). Intervals are 95% CI."}
+```{r comb_f, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "True vs estimated risk factors (regression coefficients). Intervals are 95% CI."}
 risk_coef_pred %>% left_join(., sim.params.t, by = c("dataset", "coef")) %>% mutate(
   dataset = paste("Dataset", dataset)
   , app_set = interaction(dataset, approach, sep = ": ")
@@ -677,5 +685,226 @@ risk_coef_pred %>% left_join(., sim.params.t, by = c("dataset", "coef")) %>% mut
     geom_point(colour = "firebrick3", shape = 10, size = 3) +
     facet_wrap(~coef, scales = "free_x")
 }
+```
+
+
+### Bonus Model: Among Plate Variation
+
+Here we examine a model fit to data with the addition of among-plate/run/batch variation in MFI values. We estimate this among-run variation using a random effect. First, we simulate data with the same structure as used in the above model fits, but with the addition of this source of variation, assuming that data is spread across 10 plates/runs/batches (not pictured in compiled pdf: see Rmd for details). In this simulation we assume that among-plate/run/batch variation manifests as a shift in the average value of both MFI distributions and random mixing seronegative and seropositive samples across plates/runs/batches. We do not allow for/model systematic differences in the proportion of samples seropositive among plates/runs/batches or a difference in seronegative and seropositive samples among plates/runs/batches. We then present parameter estimates for fixed effects (the same as the above models) and these random effects.
+
+```{r bonus_model_setup, echo=FALSE, cache=FALSE}
+
+establish_parameters_for_bonus_model <- function(n_param_sets, ...) {
+  
+  list(...) %>% data.frame() %>% 
+    dplyr::mutate(
+      mu_pos = mu_neg + mu_pos_delta
+      , sd_pos = sd_neg * sd_pos_delta
+    ) %>% 
+    dplyr::mutate(param_set = seq(dplyr::n()), .before = 1) %>%
+    group_by(param_set)
+  
+}
+simulate_data_for_bonus_model        <- function(param_sets, seed) {
+  
+  set.seed(seed)
+  param_sets %<>% split_tibble(., "param_set")
+  
+  lapply(param_sets, FUN = function(x) {
+    
+    mu_vec   <- with(x, c(mu_neg, mu_pos))
+    sd_vec   <- with(x, c(sd_neg, sd_pos))
+    rand_dev <- rnorm(x$cat1r_count, 0, x$theta_cat1r_sd)
+    
+    data.frame(
+      cat1f  = with(x, rbinom(n_samps, 1, cat1f_prop))
+      , cat2f  = with(x, rbinom(n_samps, 1, cat2f_prop))
+    ) %>% dplyr::mutate(
+      cat1r  = with(x, sample(seq(cat1r_count), dplyr::n(), replace = T))
+      , con1f  = with(x, rnorm(n_samps, 0, con1f_sd))
+    ) %>% 
+      mutate( 
+        cat1r_dev = rand_dev[cat1r]
+      ) %>% 
+      dplyr::mutate(
+        group = rbinom(dplyr::n(), 1
+                       , plogis(
+                         x$beta_base + 
+                           x$beta_cat1f_delta * cat1f + 
+                           con1f * x$beta_con1f_delta
+                       )
+        ) + 1
+        , titer = rnorm(dplyr::n()
+                        , mu_vec[group] + 
+                          cat1r_dev
+                        , sd_vec[group]
+        )
+        , mfi   = logit2(x$logit_1, x$logit_2, x$logit_3, titer)
+      ) %>% mutate(
+        param_set = x$param_set
+        , .before   = 1
+      )
+    
+  }) %>% do.call("rbind", .)
+  
+}
+logit2                               <- function(L, b, k, x) {
+  L / (
+    1 + exp(-k*(x - b))
+  )
+}
+
+tp <- establish_parameters_for_bonus_model(
+    n_samps          = 500
+    , cat1f_prop       = 0.5  
+    , cat2f_prop       = 0.5
+    , cat1r_count      = 10
+    , con1f_sd         = 1
+    , beta_base        = -2.5
+    , beta_cat1f_delta = 0.5
+    , beta_cat2f_delta = 1
+    , beta_con1f_delta = 0.25
+    , theta_cat1r_sd    = 0.75
+    , mu_neg            = -8
+    , sd_neg            = 1
+    , mu_pos_delta      = 3
+    , sd_pos_delta      = 1.5
+    , logit_1          = 30000
+    , logit_2          = -1
+    , logit_3          = 1
+  )
+  
+  dataset_bonus <- simulate_data_for_bonus_model(tp, 1000006) %>% mutate(mfi = log(mfi))
+
+  stan_priors <- build_stan_priors(
+    simulated_data = dataset_bonus
+  , skew_fit       = FALSE
+  , fit_attempt    = 1
+  )
+
+```
+
+This simulated dataset has approximately 10% seropositivity and moderate among-plate variation
+
+```{r bonus_model_view, echo=FALSE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Simulated MFI distributions for seronegative and seropositive individuals among plates (panels)"}
+
+dataset_bonus %>% mutate(group = plyr::mapvalues(group, from = c(1, 2), to = c("Negative", "Positive"))) %>% {
+  ggplot(., aes(x = mfi)) + 
+    geom_density(aes(colour = group, fill = group), alpha = 0.2) + 
+    facet_wrap(~cat1r) +
+    scale_colour_brewer(palette = "Dark2", name = "Serostatus") +
+    scale_fill_brewer(palette = "Dark2", name = "Serostatus")
+}
+
+```
+
+A) Fit model
+
+```{r bonus_model_fit, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
+
+  ## Compile model
+  stan_model <- cmdstanr::cmdstan_model(
+    "stan_models/cluster_regression_with_rand_plate_var.stan"
+  , pedantic = FALSE)
+  
+  ## Fit model. For model definition see ".stan" in the online supplemental material
+  stan_fit_bonus    <- try(R.utils::withTimeout(stan_model$sample(
+    data    = list(
+      N           = length(dataset_bonus$mfi)
+      , N_cat1r     = n_distinct(dataset_bonus$cat1r)
+      , y           = dataset_bonus$mfi
+      , cat1f       = dataset_bonus$cat1f
+      , cat2f       = dataset_bonus$cat2f
+      , cat1r       = dataset_bonus$cat1r
+      , con1f       = dataset_bonus$con1f
+      
+      , beta_base_prior_m   = stan_priors$priors %>% 
+        filter(param == "beta_base_prior_m") %>% pull(prior)
+      , beta_base_prior_v   = stan_priors$priors %>% 
+        filter(param == "beta_base_prior_v") %>% pull(prior) / 4
+      
+      , mu_base_prior_m     = stan_priors$priors %>% 
+        filter(param == "mu_base_prior_m") %>% pull(prior) / 2
+      , mu_base_prior_v     = stan_priors$priors %>% 
+        filter(param == "mu_base_prior_v") %>% pull(prior)
+      
+      , mu_diff_prior_m     = stan_priors$priors %>% 
+        filter(param == "mu_diff_prior_m") %>% pull(prior) * 2
+      , mu_diff_prior_v     = 2
+      
+      , sigma_base_prior_m  = stan_priors$priors %>% 
+        filter(param == "sigma_base_prior_m") %>% pull(prior)
+      , sigma_diff_prior_m  = stan_priors$priors %>% 
+        filter(param == "sigma_diff_prior_m") %>% pull(prior)
+      
+      , sigma_base_prior_v  = stan_priors$priors %>% 
+        filter(param == "sigma_base_prior_v") %>% pull(prior)
+      , sigma_diff_prior_v  = stan_priors$priors %>% 
+        filter(param == "sigma_diff_prior_v") %>% pull(prior)
+    )
+    , init            = stan_priors$starting_conditions
+    , chains          = 4
+    , parallel_chains = 4
+    , max_treedepth   = 12
+    , iter_warmup     = 2000
+    , iter_sampling   = 1000
+    , adapt_delta     = 0.98
+    , seed            = 1000006
+    , refresh         = 1000
+  ), timeout = 3600
+  ), silent  = TRUE)
+  
+## Extract predictions
+stanfit      <- rstan::read_stan_csv(stan_fit_bonus$output_files())
+samps.mat_bonus   <- rstan::extract(stanfit, permuted = FALSE)
+samps.simp_bonus  <- rstan::extract(stanfit, permuted = TRUE)
+
+```
+
+B) Run some diagnostics and compare fitted values to truth
+
+```{r setb_b, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE}
+
+stan_fit_bonus$diagnostic_summary()
+
+```
+
+```{r setb_c, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Traceplot for baseline seropositivity (`Intercept`) parameter"}
+
+samps.mat_bonus[ , , "beta_base"] %>% 
+  as.data.frame() %>% 
+  dplyr::mutate(Sample = seq(dplyr::n())) %>%
+  pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
+  ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
+      scale_color_brewer(palette = "Dark2")
+}
+
+```
+
+```{r setb_d, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Traceplot for seroprevalence estimates"}
+
+(samps.mat_bonus[ , , "pop_sero"] / nrow(dataset_bonus)) %>% 
+  as.data.frame() %>% 
+  dplyr::mutate(Sample = seq(dplyr::n())) %>%
+  pivot_longer(-Sample, values_to = "Estimate", names_to = "Chain") %>% {
+  ggplot(., aes(Sample, Estimate)) + geom_line(aes(colour = Chain)) +
+      scale_color_brewer(palette = "Dark2")
+}
+  
+```
+
+Estimated levels of the random effect match the real data well
+
+```{r setb_e, echo=TRUE, warning=FALSE, message=FALSE, cache=FALSE, fig.cap = "Estimated conditional modes of the random effect vs simulated plate-level mean MFI"}
+
+data.frame(
+  true = dataset_bonus %>% group_by(cat1r) %>% dplyr::summarize(mmfi = mean(mfi)) %>% pull(mmfi)
+, pred = samps.mat_bonus[, , 10:19] %>% apply(., 3, c) %>% colMeans()
+) %>% {
+  ggplot(., aes(true, pred)) + geom_point() +
+    xlab("Plate mean MFI") + ylab("Predicted random effect deviate
+(conditional mode of the random effect)")
+}
+
 ```
 
